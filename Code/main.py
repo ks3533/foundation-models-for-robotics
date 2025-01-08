@@ -43,16 +43,33 @@ class Controller:
         self.simulation.start()
 
     def move(self, x, y, z):
-        while np.max(abs(np.array([x, y, z])-self.env.observation_spec()["robot0_eef_pos"])) > 0.2:
-            vector = np.array([x, y, z])-self.env.observation_spec()["robot0_eef_pos"]
+        while np.max(abs(np.array([x, y, z]) - self.env.observation_spec()["robot0_eef_pos"])) > 0.02:
+            vector = np.array([x, y, z]) - self.env.observation_spec()["robot0_eef_pos"]
             distance = np.linalg.norm(vector)
             velocity = 0
-            if distance > 0.2:
+            if distance > 0.02:
                 velocity = self.max_velocity
-            elif distance > 0.02:
+            elif distance > 0.002:
                 velocity = self.min_velocity
-            velocities = np.array(vector/distance*velocity)
+            velocities = np.array(vector / distance * velocity)
             self.movement[:3] = velocities
+        self.movement = np.zeros(7)
+        print("done")
+
+    def open_gripper(self):
+        self.movement[6] = -1
+        while (self.env.observation_spec()["robot0_gripper_qpos"][0] < 0.0395 or
+               self.env.observation_spec()["robot0_gripper_qpos"][1] > -0.0395):
+            pass
+        self.movement = np.zeros(7)
+        print("done")
+
+    def close_gripper(self):
+        self.movement[6] = 1
+        while np.max(self.env.observation_spec()["robot0_gripper_qvel"]) < 0.01:
+            pass
+        while np.max(abs(self.env.observation_spec()["robot0_gripper_qvel"])) > 0.01:
+            pass
         self.movement = np.zeros(7)
         print("done")
 
@@ -60,4 +77,16 @@ class Controller:
 if __name__ == "__main__":
     controller = Controller()
     controller.start()
-    controller.move(0.3, 0, 1)
+
+    # def debug_print():
+    #     while True:
+    #         print(controller.env.observation_spec()["robot0_gripper_qvel"])
+    # threading.Thread(target=debug_print).start()
+    # controller.move(0.3, 0, 1)
+
+    controller.open_gripper()
+    controller.move(*(controller.env.observation_spec()["Milk_pos"] + [0, 0, 0.1]))
+    controller.move(*(controller.env.observation_spec()["Milk_pos"] + [0, 0, 0.03]))
+    controller.close_gripper()
+    controller.move(*(controller.env.observation_spec()["robot0_eef_pos"] + [0, 0, 0.1]))
+    pass
