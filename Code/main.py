@@ -108,12 +108,45 @@ class Controller:
 
             self.movement[3:6] = angle_velocities
 
-            #break if the angle difference is nearly zero for all three axes
+            # break if the angle difference is nearly zero for all three axes
             if all(v == 0 for v in angle_velocities):
                 break
 
         self.movement = np.zeros(7)
         print("done")
+
+    def resolve_object_from_name(self, name: str) -> dict[str, list]:
+        """Finds position and rotation of the object with the given name"""
+        observation = self.env.observation_spec()
+        return {"pos": observation[f"{name.capitalize()}_pos"], "quat": observation[f"{name.capitalize()}_quat"]}
+
+    def pick_object(self, name: str) -> None:
+        """Opens gripper, moves gripper to the object with the given name, then closes gripper"""
+        controller.open_gripper()
+        controller.rotate_gripper_abs([90, 90, 0])
+        controller.move(*(self.resolve_object_from_name(name)["pos"] + [0, 0, 0.1]))
+        controller.rotate_gripper_abs([90, 90, quat_to_euler(self.resolve_object_from_name(name)["quat"])[2] % 90])
+        controller.move(*(self.resolve_object_from_name(name)["pos"] + [0, 0, 0]))
+        controller.close_gripper()
+        print("done")
+
+    def place_object(self, name: str) -> None:
+        """Opens gripper (TODO Places object on ground, to be implemented)"""
+        # prior_time = self.env.timestep
+        # prior_pos = np.array(self.resolve_object_from_name(name)["pos"])
+        # self.movement[2] = -self.max_velocity
+        # while self.env.timestep == prior_time or abs((prior_pos-self.resolve_object_from_name(name)["pos"])[2]) >0.01:
+        #     prior_time = self.env.timestep
+        #     prior_pos = np.array(self.resolve_object_from_name(name)["pos"])
+        #     print(abs((prior_pos-self.resolve_object_from_name(name)["pos"])[2]))
+        # self.movement = np.zeros(7)
+        self.open_gripper()
+        print("done")
+
+    def match_orientation_object(self, name: str) -> None:
+        """Try to match the orientation of object with given name and rotate gripper accordingly"""
+        robot_pos = self.env.robots[0].base_pos
+        # TODO
 
 
 def quat_to_euler(quat: Sequence[int]) -> numpy.ndarray:
@@ -130,13 +163,9 @@ if __name__ == "__main__":
     controller = Controller()
     controller.start()
 
-    controller.open_gripper()
-    controller.rotate_gripper_abs([90, 90, 0])
-    controller.move(*(controller.env.observation_spec()["Milk_pos"] + [0, 0, 0.1]))
-    # TODO rotate that the milk doesn't fall back down
-    controller.rotate_gripper_abs([90, 90, quat_to_euler(controller.env.observation_spec()["Milk_quat"])[2] % 90])
-    #controller.move(*(controller.env.observation_spec()["Milk_pos"] + [0, 0, 0.1]))
-    controller.move(*(controller.env.observation_spec()["Milk_pos"] + [0, 0, 0]))
-    controller.close_gripper()
-    controller.move(*(controller.env.observation_spec()["robot0_eef_pos"] + [0, 0, 0.1]))
+    controller.match_orientation_object("Milk")
+    controller.pick_object("Milk")
+    controller.move(*(controller.env.observation_spec()["robot0_eef_pos"] + [0, 0, 0.2]))
+    controller.move(*(controller.env.target_bin_placements[0] + [0, 0, 0.2]))
+    controller.place_object("Milk")
     pass
