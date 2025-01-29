@@ -1,3 +1,5 @@
+from math import atan, pi
+from time import sleep
 from typing import Sequence
 
 import numpy
@@ -100,7 +102,7 @@ class Controller:
                 angle_velocity = 0
                 if abs(rotation) > 5:
                     angle_velocity = self.max_angle_velocity
-                elif abs(rotation) > 1:
+                elif abs(rotation) > 2:
                     angle_velocity = self.min_angle_velocity
                 if rotation < 0:
                     angle_velocity = -angle_velocity
@@ -131,21 +133,33 @@ class Controller:
         print("done")
 
     def place_object(self, name: str) -> None:
-        """Opens gripper (TODO Places object on ground, to be implemented)"""
-        # prior_time = self.env.timestep
-        # prior_pos = np.array(self.resolve_object_from_name(name)["pos"])
-        # self.movement[2] = -self.max_velocity
-        # while self.env.timestep == prior_time or abs((prior_pos-self.resolve_object_from_name(name)["pos"])[2]) >0.01:
-        #     prior_time = self.env.timestep
-        #     prior_pos = np.array(self.resolve_object_from_name(name)["pos"])
-        #     print(abs((prior_pos-self.resolve_object_from_name(name)["pos"])[2]))
-        # self.movement = np.zeros(7)
+        """Opens gripper and places object on ground"""
+        initial_time = self.env.timestep
+        prior_time = initial_time
+        prior_pos = np.array(self.resolve_object_from_name(name)["pos"])
+        self.movement[2] = -self.max_velocity
+
+        while self.env.timestep == prior_time or \
+                abs((prior_pos-self.resolve_object_from_name(name)["pos"])[2]) > 0.0001:
+            if self.env.timestep == prior_time:
+                sleep(1/80)
+                continue
+            prior_time = self.env.timestep
+            print(abs((prior_pos-self.resolve_object_from_name(name)["pos"])[2]))
+            prior_pos = np.array(self.resolve_object_from_name(name)["pos"])
+        self.movement = np.zeros(7)
         self.open_gripper()
         print("done")
 
     def match_orientation_object(self, name: str) -> None:
         """Try to match the orientation of object with given name and rotate gripper accordingly"""
+        obj = self.resolve_object_from_name(name)
         robot_pos = self.env.robots[0].base_pos
+        direction_vector = (np.array(obj["pos"]) - robot_pos)[0:2]
+        angle_to_robot = atan(direction_vector[1]/direction_vector[0])/pi*180
+        # self.rotate_gripper_abs([90, 90, 0])
+        # self.rotate_gripper_abs([90, 90, 90+angle_to_robot])
+        print(angle_to_robot)
         # TODO
 
 
