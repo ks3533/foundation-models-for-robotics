@@ -1,4 +1,5 @@
-from math import atan, pi
+from scipy.spatial.transform import Rotation
+from math import atan2, pi
 from time import sleep
 from typing import Sequence
 
@@ -117,6 +118,37 @@ class Controller:
         self.movement = np.zeros(7)
         print("done")
 
+    def rotate_axis(self, end_rotation: Sequence[int], axis: int) -> None:
+        """Rotates around one axis only using only quaternions"""
+        
+        if len(end_rotation) == 3:
+            end_rotation = Rotation.from_euler('xyz', end_rotation, degrees=True).as_quat()
+        elif len(end_rotation) != 4:
+            raise ValueError(f'"values" must be either Euler rotation (3 values) '
+                            f'or quaternion (4 values), not {len(end_rotation)} values')
+
+        while True:
+            current_quat = self.env.observation_spec()["robot0_eef_quat"]
+            
+            #calculate the rotation required to get from the current rotation to the target rotation and convert it to a vector
+            rotation_diff = Rotation.from_quat(end_rotation) * Rotation.from_quat(current_quat).inv()
+            rotvec = rotation_diff.as_rotvec()
+
+            # break if the distance to the target rotation is less than 0.1
+            if np.linalg.norm(rotvec) < 0.1:
+                break
+
+            # Set rotation_speed to a value between max and min speed, matching the rotation-distance-vector
+            rotation_speed = np.clip(rotvec, -self.max_angle_velocity, self.max_angle_velocity)
+
+            axis_vector = np.zeros(3)
+            axis_vector[axis] = rotation_speed[axis]
+
+            self.movement[3:6] = axis_vector
+
+        self.movement = np.zeros(7)
+        print("done")    
+
     def resolve_object_from_name(self, name: str) -> dict[str, list]:
         """Finds position and rotation of the object with the given name"""
         observation = self.env.observation_spec()
@@ -125,9 +157,9 @@ class Controller:
     def pick_object(self, name: str) -> None:
         """Opens gripper, moves gripper to the object with the given name, then closes gripper"""
         controller.open_gripper()
-        controller.rotate_gripper_abs([90, 90, 0])
+        #controller.rotate_gripper_abs([90, 90, 0])
         controller.move(*(self.resolve_object_from_name(name)["pos"] + [0, 0, 0.1]))
-        controller.rotate_gripper_abs([90, 90, quat_to_euler(self.resolve_object_from_name(name)["quat"])[2] % 90])
+        #controller.rotate_gripper_abs([90, 90, quat_to_euler(self.resolve_object_from_name(name)["quat"])[2] % 90])
         controller.move(*(self.resolve_object_from_name(name)["pos"] + [0, 0, 0]))
         controller.close_gripper()
         print("done")
@@ -153,15 +185,28 @@ class Controller:
 
     def match_orientation_object(self, name: str) -> None:
         """Try to match the orientation of object with given name and rotate gripper accordingly"""
+        self.rotate_gripper_abs([90, 90, 0])
         obj = self.resolve_object_from_name(name)
+        obj_rot = quat_to_euler(obj["quat"])
         robot_pos = self.env.robots[0].base_pos
+        robot_rot = quat_to_euler(controller.env.observation_spec()["robot0_eef_quat"])
         direction_vector = (np.array(obj["pos"]) - robot_pos)[0:2]
-        angle_to_robot = atan(direction_vector[1]/direction_vector[0])/pi*180
-        # self.rotate_gripper_abs([90, 90, 0])
-        # self.rotate_gripper_abs([90, 90, 90+angle_to_robot])
+        angle_to_robot = atan2(direction_vector[1], direction_vector[0])/pi*180 + 90        
+        best_angle = find_best_angle(obj_rot[2], angle_to_robot)
+        print(f"{angle_to_robot}° to robot (robot: {robot_rot}, obj: {obj_rot}) -> best angle: {best_angle}°")
+        self.rotate_axis([90, 90, best_angle], 2)
         print(angle_to_robot)
-        # TODO
 
+def find_best_angle(obj_rot, angle_to_robot):
+        """Findet den Wert aus obj['pos'] und seinen ±90°/±180° Variationen, der angle_to_robot am nächsten ist."""
+        possible_angles = [
+            obj_rot,
+            obj_rot + 90,
+            obj_rot - 90,
+            obj_rot + 180,
+            obj_rot - 180
+        ]
+        return min(possible_angles, key=lambda x: abs(abs(x) - abs(angle_to_robot)))
 
 def quat_to_euler(quat: Sequence[int]) -> numpy.ndarray:
     """Takes a quaternion and returns it as an euler angle"""
