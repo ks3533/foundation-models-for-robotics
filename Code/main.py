@@ -204,20 +204,26 @@ class Controller:
         best_angle = find_best_angle(obj_rot[2], angle_to_robot)
         print(f"{angle_to_robot}° to robot (robot: {robot_rot}, obj: {obj_rot}) -> best angle: {best_angle}°")
         self.rotate_axis([90, 90, best_angle], 2)
-        print(angle_to_robot)
+        print(f"Objekt-Rotation (Z): {obj_rot[2]}°")
+        print(f"Winkel zum Roboter: {angle_to_robot}°")
+        print(f"Ausgewählter Winkel: {best_angle}°")
 
 
 def find_best_angle(obj_rot, angle_to_robot):
     """Findet den Wert aus obj['pos'] und seinen ±90°/±180° Variationen, der angle_to_robot am nächsten ist."""
-    # todo fix that the robot takes the wrong angle sometimes
-    possible_angles = [
+    possible_angles = np.array([
         obj_rot,
         obj_rot + 90,
         obj_rot - 90,
         obj_rot + 180,
         obj_rot - 180
-    ]
-    return min(possible_angles, key=lambda x: abs(abs(angle_to_robot)-abs(x)))  # subtract_angles([x], [angle_to_robot+180])%90)
+    ])
+    print(f"Berechnete mögliche Winkel: {possible_angles}")
+    
+    possible_angles = normalise(possible_angles)
+    angle_to_robot = normalise(angle_to_robot)
+    
+    return min(possible_angles, key=lambda x: abs(subtract_angles(x, angle_to_robot)))
 
 
 def quat_to_euler(quat: Sequence[int]) -> numpy.ndarray:
@@ -227,7 +233,10 @@ def quat_to_euler(quat: Sequence[int]) -> numpy.ndarray:
 
 def subtract_angles(angles1, angles2):
     """Subtracts two angles in degrees from -180 and 180 and returns a result in the same range"""
-    return (np.array(angles1) - angles2 + 180) % 360 - 180
+    return normalise(np.array(angles1) - angles2)
+
+def normalise(angle):
+    return (angle + 180) % 360 - 180
 
 
 if __name__ == "__main__":
