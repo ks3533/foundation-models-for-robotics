@@ -140,6 +140,8 @@ class Controller:
 
             # Set rotation_speed to a value between max and min speed, matching the rotation-distance-vector
             rotation_speed = np.clip(rotvec, -self.max_angle_velocity, self.max_angle_velocity)
+            if abs(rotation_speed[axis]) < self.min_angle_velocity:
+                break
 
             axis_vector = np.zeros(3)
             axis_vector[axis] = rotation_speed[axis]
