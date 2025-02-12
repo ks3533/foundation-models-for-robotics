@@ -6,8 +6,9 @@ import numpy
 import numpy as np
 
 import robosuite as suite
-from robosuite.controllers.composite.composite_controller_factory import refactor_composite_controller_config
+from robosuite.controllers.composite.composite_controller_factory import load_composite_controller_config
 from scipy.spatial.transform import Rotation
+import robocasa  # needed for the environments, doesn't find them otherwise
 
 import threading
 
@@ -20,30 +21,32 @@ class Controller:
         self.max_angle_velocity = 0.1
         self.min_angle_velocity = 0.01
 
-        self.movement = np.zeros(7)
-
-        self.simulation_is_running = True
-
-        self.simulation = threading.Thread(target=self._simulate)
         options = {
-            "env_name": "PickPlaceMilk",
-            "robots": "Panda",
-            "controller_configs": refactor_composite_controller_config(
-                suite.load_part_controller_config(default_controller="OSC_POSE"), "Panda", ["right"]
-            )
+            "env_name": "MicrowaveThawing",
+            "robots": "PandaOmron",
+            "controller_configs": load_composite_controller_config(robot="PandaOmron"),
 
         }
         self.env = suite.make(
             **options,
             has_renderer=True,
             has_offscreen_renderer=False,
+            render_camera=None,
             ignore_done=True,
             use_camera_obs=False,
             control_freq=20,
+            renderer="mjviewer"
         )
+
         self.env.reset()
 
         self.action_dim = self.env.action_spec[0].shape[0]
+
+        self.movement = np.zeros(self.action_dim)
+
+        self.simulation_is_running = True
+
+        self.simulation = threading.Thread(target=self._simulate)
 
         self.env.viewer.set_camera(camera_id=2)
 
@@ -74,7 +77,7 @@ class Controller:
                 velocity = self.min_velocity
             velocities = vector / distance * velocity
             self.movement[:3] = velocities
-        self.movement = np.zeros(7)
+        self.movement = np.zeros(self.action_dim)
         print(f"moved to {x}, {y}, {z}")
 
     def open_gripper(self):
@@ -82,7 +85,7 @@ class Controller:
         while (self.env.observation_spec()["robot0_gripper_qpos"][0] < 0.0395 or
                self.env.observation_spec()["robot0_gripper_qpos"][1] > -0.0395):
             pass
-        self.movement = np.zeros(7)
+        self.movement = np.zeros(self.action_dim)
         print("opened gripper")
 
     def close_gripper(self):
@@ -91,7 +94,7 @@ class Controller:
             pass
         while np.max(abs(self.env.observation_spec()["robot0_gripper_qvel"])) > 0.01:
             pass
-        self.movement = np.zeros(7)
+        self.movement = np.zeros(self.action_dim)
         print("closed gripper")
 
     def rotate_gripper_abs(self, end_rotation: Sequence[int]) -> None:
@@ -125,7 +128,7 @@ class Controller:
             if all(v == 0 for v in angle_velocities):
                 break
 
-        self.movement = np.zeros(7)
+        self.movement = np.zeros(self.action_dim)
         print(f'rotated gripper to {", ".join([str(rot) for rot in end_rotation])}')
 
     def rotate_axis(self, end_rotation: Sequence[int], axis: int) -> None:
@@ -158,13 +161,13 @@ class Controller:
 
             self.movement[3:6] = axis_vector
 
-        self.movement = np.zeros(7)
+        self.movement = np.zeros(self.action_dim)
         print("done")
 
     def resolve_object_from_name(self, name: str) -> dict[str, list]:
         """Finds position and rotation of the object with the given name"""
         observation = self.env.observation_spec()
-        return {"pos": observation[f"{name.capitalize()}_pos"], "quat": observation[f"{name.capitalize()}_quat"]}
+        return {"pos": observation[f"{name}_pos"], "quat": observation[f"{name}_quat"]}
 
     def pick_object(self, name: str) -> None:
         """Opens gripper, moves gripper to the object with the given name, then closes gripper"""
@@ -190,7 +193,7 @@ class Controller:
                 continue
             prior_time = self.env.timestep
             prior_pos = np.array(self.resolve_object_from_name(name)["pos"])
-        self.movement = np.zeros(7)
+        self.movement = np.zeros(self.action_dim)
         self.open_gripper()
         print(f'placed object "{name}"')
 
@@ -235,11 +238,10 @@ if __name__ == "__main__":
     controller = Controller()
     controller.start()
 
-    controller.match_orientation_object("Milk")
-    controller.pick_object("Milk")
+    controller.pick_object("obj")
     controller.move(*(controller.env.observation_spec()["robot0_eef_pos"] + [0, 0, 0.2]))
     controller.move(*(controller.env.target_bin_placements[0] + [0, 0, 0.2]))
-    controller.place_object("Milk")
+    controller.place_object("obj")
     controller.stop()
     print("finished simulation")
     pass
