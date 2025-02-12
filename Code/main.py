@@ -209,7 +209,6 @@ class Controller:
 
 def find_best_angle(obj_rot, angle_to_robot):
     """Findet den Wert aus obj['pos'] und seinen ±90°/±180° Variationen, der angle_to_robot am nächsten ist."""
-    # todo fix that the robot takes the wrong angle sometimes
     possible_angles = [
         obj_rot,
         obj_rot + 90,
@@ -217,7 +216,7 @@ def find_best_angle(obj_rot, angle_to_robot):
         obj_rot + 180,
         obj_rot - 180
     ]
-    return min(possible_angles, key=lambda x: abs(abs(angle_to_robot)-abs(x)))  # subtract_angles([x], [angle_to_robot+180])%90)
+    return min(possible_angles, key=lambda x: subtract_angles([angle_to_robot+180], [x]))
 
 
 def quat_to_euler(quat: Sequence[int]) -> numpy.ndarray:
