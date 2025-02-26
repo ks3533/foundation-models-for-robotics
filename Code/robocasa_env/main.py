@@ -9,6 +9,7 @@ import robosuite as suite
 from robosuite.controllers.composite.composite_controller_factory import load_composite_controller_config
 from scipy.spatial.transform import Rotation
 import robocasa  # needed for the environments, doesn't find them otherwise
+from robocasa.utils.object_utils import compute_rel_transform
 
 import threading
 
@@ -34,7 +35,7 @@ class Controller:
             render_camera=None,
             ignore_done=True,
             use_camera_obs=False,
-            control_freq=20,
+            control_freq=80,
             renderer="mjviewer"
         )
 
@@ -67,7 +68,9 @@ class Controller:
         self.simulation.join()
 
     def move(self, x, y, z):
+        print(f"Started moving to {x, y, z}")
         while np.max(abs(np.array([x, y, z]) - self.env.observation_spec()["robot0_eef_pos"])) > 0.02:
+            # print(f'original {np.array([x, y, z]) - self.env.observation_spec()["robot0_eef_pos"]} now {self.env.observation_spec()["obj_to_robot0_eef_pos"]}')
             vector = np.array([x, y, z]) - self.env.observation_spec()["robot0_eef_pos"]
             distance = np.linalg.norm(vector)
             velocity = 0
@@ -77,6 +80,43 @@ class Controller:
                 velocity = self.min_velocity
             velocities = vector / distance * velocity
             self.movement[:3] = velocities
+            if self.env.timestep % 20 == 0:
+                print(f"Currently at {self.env.observation_spec()['robot0_eef_pos']}")
+        self.movement = np.zeros(self.action_dim)
+        print(f"moved to {x}, {y}, {z}")
+
+    def move_relative_to_robot(self, x, y, z):
+        print(f"Started moving to {x, y, z}")
+        robot_position = controller.env.robots[0].base_pos
+        robot_orientation = controller.env.robots[0].base_ori
+        object_orientation = numpy.identity(3)
+        while np.max(  # compute the maximum difference of start and goal
+                abs(
+                    compute_rel_transform(
+                        np.zeros(3),
+                        robot_orientation,
+                        np.array([x, y, z]) - self.env.observation_spec()["robot0_eef_pos"],
+                        object_orientation
+                    )[0]
+                )
+        ) > 0.02:
+            # print(f'original {np.array([x, y, z]) - self.env.observation_spec()["robot0_eef_pos"]} now {self.env.observation_spec()["obj_to_robot0_eef_pos"]}')
+            vector = compute_rel_transform(
+                        np.zeros(3),
+                        robot_orientation,
+                        np.array([x, y, z]) - self.env.observation_spec()["robot0_eef_pos"],
+                        object_orientation
+                    )[0]
+            distance = np.linalg.norm(vector)
+            velocity = 0
+            if distance > 0.02:
+                velocity = self.max_velocity
+            elif distance > 0.002:
+                velocity = self.min_velocity
+            velocities = vector / distance * velocity
+            self.movement[:3] = velocities
+            if self.env.timestep % 20 == 0:
+                print(f"Currently at {self.env.observation_spec()['robot0_eef_pos']}")
         self.movement = np.zeros(self.action_dim)
         print(f"moved to {x}, {y}, {z}")
 
@@ -167,15 +207,16 @@ class Controller:
     def resolve_object_from_name(self, name: str) -> dict[str, list]:
         """Finds position and rotation of the object with the given name"""
         observation = self.env.observation_spec()
+        print(f'Resolved "{name}" to ("pos": {observation[f"{name}_pos"]} "quat": {observation[f"{name}_quat"]})')
         return {"pos": observation[f"{name}_pos"], "quat": observation[f"{name}_quat"]}
 
     def pick_object(self, name: str) -> None:
         """Opens gripper, moves gripper to the object with the given name, then closes gripper"""
         controller.open_gripper()
         # controller.rotate_gripper_abs([90, 90, 0])
-        controller.move(*(self.resolve_object_from_name(name)["pos"] + [0, 0, 0.1]))
+        controller.move_relative_to_robot(*(self.resolve_object_from_name(name)["pos"] + [0, 0, 0.1]))
         # controller.rotate_gripper_abs([90, 90, quat_to_euler(self.resolve_object_from_name(name)["quat"])[2] % 90])
-        controller.move(*(self.resolve_object_from_name(name)["pos"] + [0, 0, 0]))
+        controller.move_relative_to_robot(*(self.resolve_object_from_name(name)["pos"] + [0, 0, 0]))
         controller.close_gripper()
         print(f'picked object "{name}"')
 
@@ -240,7 +281,7 @@ if __name__ == "__main__":
 
     controller.pick_object("obj")
     controller.move(*(controller.env.observation_spec()["robot0_eef_pos"] + [0, 0, 0.2]))
-    controller.move(*(controller.env.target_bin_placements[0] + [0, 0, 0.2]))
+    # controller.move(*(controller.env.target_bin_placements[0] + [0, 0, 0.2]))
     controller.place_object("obj")
     controller.stop()
     print("finished simulation")
