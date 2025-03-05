@@ -14,6 +14,9 @@ from robocasa.utils.object_utils import compute_rel_transform
 import threading
 
 
+# TODO force kitchen variant
+
+
 class Controller:
     def __init__(self):
         self.max_velocity = 0.2
@@ -70,7 +73,6 @@ class Controller:
     def move(self, x, y, z):
         print(f"Started moving to {x, y, z}")
         while np.max(abs(np.array([x, y, z]) - self.env.observation_spec()["robot0_eef_pos"])) > 0.02:
-            # print(f'original {np.array([x, y, z]) - self.env.observation_spec()["robot0_eef_pos"]} now {self.env.observation_spec()["obj_to_robot0_eef_pos"]}')
             vector = np.array([x, y, z]) - self.env.observation_spec()["robot0_eef_pos"]
             distance = np.linalg.norm(vector)
             velocity = 0
@@ -87,8 +89,7 @@ class Controller:
 
     def move_relative_to_robot(self, x, y, z):
         print(f"Started moving to {x, y, z}")
-        robot_position = controller.env.robots[0].base_pos
-        robot_orientation = controller.env.robots[0].base_ori
+        robot_orientation = self.env.robots[0].base_ori
         object_orientation = numpy.identity(3)
         while np.max(  # compute the maximum difference of start and goal
                 abs(
@@ -137,6 +138,9 @@ class Controller:
         self.movement = np.zeros(self.action_dim)
         print("closed gripper")
 
+    def get_eef_pos(self):
+        return self.env.observation_spec()["robot0_eef_pos"]
+
     def rotate_gripper_abs(self, end_rotation: Sequence[int]) -> None:
         """Rotates the gripper to an absolute end rotation"""
         # if end_rotation is quaternion, convert it to euler
@@ -148,9 +152,9 @@ class Controller:
                              f'or quaternion (4 values), not {len(end_rotation)} values')
         # while the angle differences are bigger than the tolerance
         while np.max(abs(subtract_angles(end_rotation, quat_to_euler(
-                controller.env.observation_spec()["robot0_eef_quat"]))
+                self.env.observation_spec()["robot0_eef_quat"]))
                          )) > 0.5:
-            vector = subtract_angles(end_rotation, quat_to_euler(controller.env.observation_spec()["robot0_eef_quat"]))
+            vector = subtract_angles(end_rotation, quat_to_euler(self.env.observation_spec()["robot0_eef_quat"]))
             angle_velocities = []
             for rotation in vector:
                 angle_velocity = 0
@@ -204,65 +208,109 @@ class Controller:
         self.movement = np.zeros(self.action_dim)
         print("done")
 
-    def resolve_object_from_name(self, name: str) -> dict[str, list]:
+    def resolve_object_from_name(self, object_name: str) -> dict[str, list]:
         """Finds position and rotation of the object with the given name"""
         observation = self.env.observation_spec()
-        print(f'Resolved "{name}" to ("pos": {observation[f"{name}_pos"]} "quat": {observation[f"{name}_quat"]})')
-        return {"pos": observation[f"{name}_pos"], "quat": observation[f"{name}_quat"]}
+        print(f'Resolved "{object_name}" to ("pos": {observation[f"{object_name}_pos"]} "quat": {observation[f"{object_name}_quat"]})')
+        return {"pos": observation[f"{object_name}_pos"], "quat": observation[f"{object_name}_quat"]}
 
-    def pick_object(self, name: str) -> None:
+    def pick_object(self, object_name: str) -> None:
         """Opens gripper, moves gripper to the object with the given name, then closes gripper"""
-        controller.open_gripper()
-        # controller.rotate_gripper_abs([90, 90, 0])
-        controller.move_relative_to_robot(*(self.resolve_object_from_name(name)["pos"] + [0, 0, 0.1]))
-        # controller.rotate_gripper_abs([90, 90, quat_to_euler(self.resolve_object_from_name(name)["quat"])[2] % 90])
-        controller.move_relative_to_robot(*(self.resolve_object_from_name(name)["pos"] + [0, 0, 0]))
-        controller.close_gripper()
-        print(f'picked object "{name}"')
+        self.open_gripper()
+        # self.rotate_gripper_abs([90, 90, 0])
+        self.move_relative_to_robot(*(self.resolve_object_from_name(object_name)["pos"] + [0, 0, 0.1]))
+        # self.rotate_gripper_abs([90, 90, quat_to_euler(self.resolve_object_from_name(object_name)["quat"])[2] % 90])
+        self.move_relative_to_robot(*(self.resolve_object_from_name(object_name)["pos"] + [0, 0, 0]))
+        self.close_gripper()
+        print(f'picked object "{object_name}"')
 
-    def place_object(self, name: str) -> None:
+    def place_object_from_direction(self, object_name: str, destination: Sequence[int], direction: str):
+        # todo fix, use robot orientation to get the direction vector, then move along every axis except for the given vector
+        robot_orientation = self.env.robots[0].base_ori
+        # compute_rel_transform(
+        #     np.zeros(3),
+        #     robot_orientation,
+        #     np.array(destination) - self.env.observation_spec()["robot0_eef_pos"],
+        #     np.identity(3)
+        # )[0]
+        match direction:
+            case "front":
+                pass
+            case "left":
+                pass
+            case "right":
+                pass
+            case "up":
+                pass
+        self.move()
+        self.place_object(object_name)
+
+    def grip_object_with_rotation_offset(self, object_name: str, rotation_offset: int):
+        """Opens gripper, moves gripper to the object with the given name, then closes gripper"""
+        self.open_gripper()
+        self.move_relative_to_robot(*(self.resolve_object_from_name(object_name)["pos"] + [0, 0, 0.1]))
+        self.match_orientation_with_offset(object_name, rotation_offset)
+        self.move_relative_to_robot(*(self.resolve_object_from_name(object_name)["pos"] + [0, 0, 0]))
+        self.close_gripper()
+        print(f'picked object "{object_name}"')
+        pass
+
+    def press_button(self):
+        pass
+
+    def open_door(self):
+        pass
+
+    def close_door(self):
+        pass
+
+    def place_object(self, object_name: str) -> None:
         """Opens gripper and places object on ground"""
         initial_time = self.env.timestep
         prior_time = initial_time
-        prior_pos = np.array(self.resolve_object_from_name(name)["pos"])
+        prior_pos = np.array(self.resolve_object_from_name(object_name)["pos"])
         self.movement[2] = -self.max_velocity
 
         while self.env.timestep == prior_time or \
-                abs((prior_pos - self.resolve_object_from_name(name)["pos"])[2]) > 0.0001:
+                abs((prior_pos - self.resolve_object_from_name(object_name)["pos"])[2]) > 0.0001:
             if self.env.timestep == prior_time:
                 sleep(1 / 80)
                 continue
             prior_time = self.env.timestep
-            prior_pos = np.array(self.resolve_object_from_name(name)["pos"])
+            prior_pos = np.array(self.resolve_object_from_name(object_name)["pos"])
         self.movement = np.zeros(self.action_dim)
         self.open_gripper()
-        print(f'placed object "{name}"')
+        print(f'placed object "{object_name}"')
 
-    def match_orientation_object(self, name: str) -> None:
-        """Try to match the orientation of object with given name and rotate gripper accordingly"""
-        self.rotate_gripper_abs([90, 90, 0])
-        obj = self.resolve_object_from_name(name)
+    def match_orientation_with_offset(self, object_name: str, offset: int) -> None:
+        """Try to match the orientation of object with given name (and offset) and rotate gripper accordingly"""
+        # TODO fix
+        obj = self.resolve_object_from_name(object_name)
         obj_rot = quat_to_euler(obj["quat"])
         robot_pos = self.env.robots[0].base_pos
-        robot_rot = quat_to_euler(controller.env.observation_spec()["robot0_eef_quat"])
-        direction_vector = (np.array(obj["pos"]) - robot_pos)[0:2]
+        # robot_orientation = self.env.robots[0].base_ori
+        direction_vector = (np.array(obj["pos"]) - robot_pos)
         angle_to_robot = atan2(direction_vector[1], direction_vector[0]) / pi * 180 + 90
-        best_angle = find_best_angle(obj_rot[2], angle_to_robot)
-        print(f"{angle_to_robot}° to robot (robot: {robot_rot}, obj: {obj_rot}) -> best angle: {best_angle}°")
-        self.rotate_axis([90, 90, best_angle], 2)
+        # rotation_matrix = compute_rel_transform(
+        #     np.zeros(3),
+        #     robot_orientation,
+        #     direction_vector,
+        #     np.identity(3)
+        # )[0]
+        self.rotate_axis([0, 0, (obj_rot[2] % 90)+offset], 2)
         print(angle_to_robot)
 
 
-def find_best_angle(obj_rot, angle_to_robot):
-    """Findet den Wert aus obj['pos'] und seinen ±90°/±180° Variationen, der angle_to_robot am nächsten ist."""
-    possible_angles = [
-        obj_rot,
-        obj_rot + 90,
-        obj_rot - 90,
-        obj_rot + 180,
-        obj_rot - 180
-    ]
-    return min(possible_angles, key=lambda x: subtract_angles([angle_to_robot+180], [x]))
+# def find_best_angle(obj_rot, angle_to_robot):
+#     """Findet den Wert aus obj['pos'] und seinen ±90°/±180° Variationen, der angle_to_robot am nächsten ist."""
+#     possible_angles = [
+#         obj_rot,
+#         obj_rot + 90,
+#         obj_rot - 90,
+#         obj_rot + 180,
+#         obj_rot - 180
+#     ]
+#     return min(possible_angles, key=lambda x: subtract_angles([angle_to_robot+180], [x]))
 
 
 def quat_to_euler(quat: Sequence[int]) -> numpy.ndarray:
@@ -279,8 +327,8 @@ if __name__ == "__main__":
     controller = Controller()
     controller.start()
 
-    controller.pick_object("obj")
-    controller.move(*(controller.env.observation_spec()["robot0_eef_pos"] + [0, 0, 0.2]))
+    controller.grip_object_with_rotation_offset("obj", 0)
+    controller.move(*(controller.get_eef_pos() + [0, 0, 0.2]))
     # controller.move(*(controller.env.target_bin_placements[0] + [0, 0, 0.2]))
     controller.place_object("obj")
     controller.stop()
