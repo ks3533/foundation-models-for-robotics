@@ -90,7 +90,39 @@ class Controller:
     def move_relative_to_robot(self, x, y, z):
         print(f"Started moving to {x, y, z}")
         robot_orientation = self.env.robots[0].base_ori
-        object_orientation = numpy.identity(3)
+        object_orientation = numpy.identity(3, dtype=np.float64)
+
+        # import mujoco
+        # viewer = self.env.viewer.viewer
+        # viewer.user_scn.ngeom += 1
+        # print(viewer.user_scn.ngeom)
+        # orient = np.array(
+        #     [
+        #         [1, 0, 0],
+        #         [0, 1, 0],
+        #         [0, 0, 1]
+        #      ], dtype=np.float64
+        # )
+        # mujoco.mjv_initGeom(viewer.user_scn.geoms[viewer.user_scn.ngeom-1], mujoco.mjtGeom.mjGEOM_ARROW, size=np.array([0.01, 0.01, 0.1], dtype=np.float64), pos=np.array([x, y, z], dtype=np.float64), mat=orient.flatten(), rgba=np.array([0, 0 ,1 ,1], dtype=np.float32))
+        # viewer.user_scn.ngeom += 1
+        # orient = np.array(
+        #     [
+        #         [0, 0, 1],
+        #         [0, 1, 0],
+        #         [1, 0, 0]
+        #      ], dtype=np.float64
+        # )
+        # mujoco.mjv_initGeom(viewer.user_scn.geoms[viewer.user_scn.ngeom-1], mujoco.mjtGeom.mjGEOM_ARROW, size=np.array([0.01, 0.01, 0.1], dtype=np.float64), pos=np.array([x, y, z], dtype=np.float64), mat=orient.flatten(), rgba=np.array([1, 0 ,0 ,1], dtype=np.float32))
+        # viewer.user_scn.ngeom += 1
+        # orient = np.array(
+        #     [
+        #         [1, 0, 0],
+        #         [0, 0, 1],
+        #         [0, 1, 0]
+        #      ], dtype=np.float64
+        # )
+        # mujoco.mjv_initGeom(viewer.user_scn.geoms[viewer.user_scn.ngeom-1], mujoco.mjtGeom.mjGEOM_ARROW, size=np.array([0.01, 0.01, 0.1], dtype=np.float64), pos=np.array([x, y, z], dtype=np.float64), mat=orient.flatten(), rgba=np.array([0, 1 ,0 ,1], dtype=np.float32))
+
         while np.max(  # compute the maximum difference of start and goal
                 abs(
                     compute_rel_transform(
@@ -224,26 +256,45 @@ class Controller:
         self.close_gripper()
         print(f'picked object "{object_name}"')
 
-    def place_object_from_direction(self, object_name: str, destination: Sequence[int], direction: str):
-        # todo fix, use robot orientation to get the direction vector, then move along every axis except for the given vector
+    def approach_destination_from_direction(self, destination: Sequence[int], direction: str):
+        # use robot orientation to get the direction vector, then move along every axis except for the given vector
+        # todo fix line 296 or matrices?? further testing required
         robot_orientation = self.env.robots[0].base_ori
-        # compute_rel_transform(
-        #     np.zeros(3),
-        #     robot_orientation,
-        #     np.array(destination) - self.env.observation_spec()["robot0_eef_pos"],
-        #     np.identity(3)
-        # )[0]
+        object_position = compute_rel_transform(
+            np.zeros(3),
+            robot_orientation,
+            np.array(destination) - self.env.observation_spec()["robot0_eef_pos"],
+            np.identity(3)
+        )[0]
         match direction:
             case "front":
-                pass
+                matrix = np.array([
+                    [1, 0, 0],
+                    [0, 0, 0],
+                    [0, 0, 1]
+                ])
             case "left":
-                pass
+                matrix = np.array([
+                    [0, 0, 0],
+                    [0, 1, 0],
+                    [0, 0, 1]
+                ])
             case "right":
-                pass
+                matrix = np.array([
+                    [0, 0, 0],
+                    [0, 1, 0],
+                    [0, 0, 1]
+                ])
             case "up":
-                pass
-        self.move()
-        self.place_object(object_name)
+                matrix = np.array([
+                    [1, 0, 0],
+                    [0, 1, 0],
+                    [0, 0, 0]
+                ])
+            case _:
+                matrix = np.identity(3)
+        # self.move_relative_to_robot(*np.dot(np.dot(matrix, robot_orientation), destination))
+        self.move_relative_to_robot(*destination)
 
     def grip_object_with_rotation_offset(self, object_name: str, rotation_offset: int):
         """Opens gripper, moves gripper to the object with the given name, then closes gripper"""
@@ -327,6 +378,7 @@ if __name__ == "__main__":
     controller = Controller()
     controller.start()
 
+    controller.approach_destination_from_direction(controller.resolve_object_from_name("obj")["pos"], "front")
     controller.grip_object_with_rotation_offset("obj", 0)
     controller.move(*(controller.get_eef_pos() + [0, 0, 0.2]))
     # controller.move(*(controller.env.target_bin_placements[0] + [0, 0, 0.2]))
