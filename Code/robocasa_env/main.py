@@ -48,6 +48,8 @@ class Controller:
 
         self.action_dim = self.env.action_spec[0].shape[0]
 
+        # array that contains all movement velocities that are to be executed in the next timestep
+        # consists of xyz-velocities [0:3], xyz-rotation [3:6], gripper [6] and unknown [7:12]
         self.movement = np.zeros(self.action_dim)
 
         self.simulation_is_running = True
@@ -72,59 +74,25 @@ class Controller:
         self.simulation_is_running = False
         self.simulation.join()
 
-    def move(self, x, y, z) -> None:
-        print(f"Started moving to {x, y, z}")
-        while np.max(abs(np.array([x, y, z]) - self.env.observation_spec()["robot0_eef_pos"])) > 0.02:
-            vector = np.array([x, y, z]) - self.env.observation_spec()["robot0_eef_pos"]
-            distance = np.linalg.norm(vector)
-            velocity = 0
-            if distance > 0.02:
-                velocity = self.max_velocity
-            elif distance > 0.002:
-                velocity = self.min_velocity
-            velocities = vector / distance * velocity
-            self.movement[:3] = velocities
-            if self.env.timestep % 20 == 0:
-                print(f"Currently at {self.env.observation_spec()['robot0_eef_pos']}")
-        self.movement = np.zeros(self.action_dim)
-        print(f"moved to {x}, {y}, {z}")
+    def transform_to_robot_frame(self, coordinates: Sequence[int], orientation=np.identity(3)) \
+            -> (np.ndarray, np.ndarray):
+        """transforms coordinates and orientations as rotation matrices into the robot frame"""
+        return compute_rel_transform(self.env.robots[0].base_pos, self.env.robots[0].base_ori, coordinates, orientation)
 
-    def move_relative_to_robot(self, x, y, z) -> None:
-        """misleadingly named, actually moves to absolute coordinates, but in a manner that the non-stationary robot
-        can understand"""
-        print(f"Started moving to {x, y, z}")
-        robot_orientation = self.env.robots[0].base_ori
-        object_orientation = numpy.identity(3, dtype=np.float64)
+    def get_eef_pos_rel(self) -> np.ndarray:
+        """returns the eef pos relative to the robot"""
+        return self.transform_to_robot_frame(self.env.observation_spec()["robot0_eef_pos"])[0]
 
-        while np.max(  # compute the maximum difference of start and goal
-                abs(
-                    compute_rel_transform(
-                        np.zeros(3),
-                        robot_orientation,
-                        np.array([x, y, z]) - self.env.observation_spec()["robot0_eef_pos"],
-                        object_orientation
-                    )[0]
-                )
-        ) > 0.02:
-            # print(f'original {np.array([x, y, z]) - self.env.observation_spec()["robot0_eef_pos"]} now {self.env.observation_spec()["obj_to_robot0_eef_pos"]}')
-            vector = compute_rel_transform(
-                        np.zeros(3),
-                        robot_orientation,
-                        np.array([x, y, z]) - self.env.observation_spec()["robot0_eef_pos"],
-                        object_orientation
-                    )[0]
-            distance = np.linalg.norm(vector)
-            velocity = 0
-            if distance > 0.02:
-                velocity = self.max_velocity
-            elif distance > 0.002:
-                velocity = self.min_velocity
-            velocities = vector / distance * velocity
-            self.movement[:3] = velocities
-            if self.env.timestep % 20 == 0:
-                print(f"Currently at {self.env.observation_spec()['robot0_eef_pos']}")
-        self.movement = np.zeros(self.action_dim)
-        print(f"moved to {x}, {y}, {z}")
+    def resolve_object_from_name_rel(self, object_name: str) -> dict[str, list]:
+        """finds position and rotation of the object with the given name and returns it in the robot frame"""
+        observation = self.env.observation_spec()
+        print(f'Resolved "{object_name}" '
+              f'to ("pos": {observation[f"{object_name}_pos"]} "quat": {observation[f"{object_name}_quat"]})')
+        result = self.transform_to_robot_frame(
+            observation[f"{object_name}_pos"],
+            Rotation.from_quat(observation[f"{object_name}_quat"]).as_matrix()
+        )
+        return {"pos": result[0], "rot": result[1]}
 
     def open_gripper(self) -> None:
         self.movement[6] = -1
@@ -143,10 +111,28 @@ class Controller:
         self.movement = np.zeros(self.action_dim)
         print("closed gripper")
 
-    def get_eef_pos(self) -> np.ndarray:
-        return self.env.observation_spec()["robot0_eef_pos"]
+    def move_rel(self, x, y, z) -> None:
+        """move to given coordinates relative to the robot"""
+        print(f"Started moving to relative coordinates {x, y, z}")
+        while np.max(  # compute the maximum difference of start and goal
+                abs(np.array([x, y, z]) - self.get_eef_pos_rel())
+        ) > 0.02:
+            vector = np.array([x, y, z]) - self.get_eef_pos_rel()
+            distance = np.linalg.norm(vector)
+            velocity = 0
+            if distance > 0.02:
+                velocity = self.max_velocity
+            elif distance > 0.002:
+                velocity = self.min_velocity
+            velocities = vector / distance * velocity
+            self.movement[:3] = velocities
+            if self.env.timestep % 20 == 0:
+                print(f"Currently at relative coordinates {self.get_eef_pos_rel()}")
+        self.movement = np.zeros(self.action_dim)
+        print(f"moved to relative coordinates {x}, {y}, {z}")
 
     def rotate_gripper_abs(self, end_rotation: Sequence[int]) -> None:
+        # maybe needs fixing because of relative coordinates
         """Rotates the gripper to an absolute end rotation"""
         # if end_rotation is quaternion, convert it to euler
         if len(end_rotation) == 4:
@@ -181,6 +167,7 @@ class Controller:
         print(f'rotated gripper to {", ".join([str(rot) for rot in end_rotation])}')
 
     def rotate_axis(self, end_rotation: Sequence[int], axis: int) -> None:
+        # maybe needs fixing because of relative coordinates
         """Rotates around one axis using only quaternions"""
 
         if len(end_rotation) == 3:
@@ -213,27 +200,21 @@ class Controller:
         self.movement = np.zeros(self.action_dim)
         print("done")
 
-    def resolve_object_from_name(self, object_name: str) -> dict[str, list]:
-        """Finds position and rotation of the object with the given name"""
-        observation = self.env.observation_spec()
-        print(f'Resolved "{object_name}" '
-              f'to ("pos": {observation[f"{object_name}_pos"]} "quat": {observation[f"{object_name}_quat"]})')
-        return {"pos": observation[f"{object_name}_pos"], "quat": observation[f"{object_name}_quat"]}
-
     def pick_object(self, object_name: str) -> None:
+        # maybe needs fixing because of relative coordinates
         """Opens gripper, moves gripper to the object with the given name, then closes gripper"""
         self.open_gripper()
         # self.rotate_gripper_abs([90, 90, 0])
-        self.move_relative_to_robot(*(self.resolve_object_from_name(object_name)["pos"] + [0, 0, 0.1]))
+        self.move_rel(*(self.resolve_object_from_name_rel(object_name)["pos"] + [0, 0, 0.1]))
         # self.rotate_gripper_abs([90, 90, quat_to_euler(self.resolve_object_from_name(object_name)["quat"])[2] % 90])
-        self.move_relative_to_robot(*(self.resolve_object_from_name(object_name)["pos"] + [0, 0, 0]))
+        self.move_rel(*(self.resolve_object_from_name_rel(object_name)["pos"] + [0, 0, 0]))
         self.close_gripper()
         print(f'picked object "{object_name}"')
 
-    def approach_destination_from_direction(self, destination: Sequence[int], direction: str):
-        # use robot orientation to get the direction vector, then move along every axis except for the given vector
+    def approach_destination_from_direction(self, destination: Sequence[int], direction: str) -> None:
+        """move along every axis except for the given direction, then move to destination
+        uses relative coordinates"""
         # TODO fix that left/right and front sometimes rotate with the robot inside world coordinate system
-        robot_orientation = self.env.robots[0].base_ori
         match direction:
             case "front":
                 matrix = np.array([
@@ -261,54 +242,59 @@ class Controller:
                 ])
             case _:
                 matrix = np.identity(3)
-        self.move_relative_to_robot(*(
+        self.move_rel(*(
             np.dot(matrix, destination)
-            + np.dot(np.identity(3, dtype=int)-matrix, self.env.observation_spec()["robot0_eef_pos"])
+            + np.dot(np.identity(3, dtype=int) - matrix, self.get_eef_pos_rel())
         ))
-        self.move_relative_to_robot(*destination)
+        self.move_rel(*destination)
 
-    def grip_object_with_rotation_offset(self, object_name: str, rotation_offset: int):
+    def grip_object_with_rotation_offset(self, object_name: str, rotation_offset: int) -> None:
+        # maybe needs fixing because of relative coordinates
         """Opens gripper, moves gripper to the object with the given name, then closes gripper"""
         self.open_gripper()
-        self.move_relative_to_robot(*(self.resolve_object_from_name(object_name)["pos"] + [0, 0, 0.1]))
+        self.move_rel(*(self.resolve_object_from_name_rel(object_name)["pos"] + [0, 0, 0.1]))
         self.match_orientation_with_offset(object_name, rotation_offset)
-        self.move_relative_to_robot(*(self.resolve_object_from_name(object_name)["pos"] + [0, 0, 0]))
+        self.move_rel(*(self.resolve_object_from_name_rel(object_name)["pos"] + [0, 0, 0]))
         self.close_gripper()
         print(f'picked object "{object_name}"')
         pass
 
-    def press_button(self):
+    def press_button(self) -> None:
         pass
 
-    def open_door(self):
+    def open_door(self) -> None:
+        # TODO find handle pos? env.microwave has interesting properties
+        #  maybe use MuJoCo directly to modify env.model, env.sim or similar
         pass
 
-    def close_door(self):
+    def close_door(self) -> None:
         pass
 
     def place_object(self, object_name: str) -> None:
+        # maybe needs fixing because of relative coordinates
         """Opens gripper and places object on ground"""
         initial_time = self.env.timestep
         prior_time = initial_time
-        prior_pos = np.array(self.resolve_object_from_name(object_name)["pos"])
+        prior_pos = np.array(self.resolve_object_from_name_rel(object_name)["pos"])
         self.movement[2] = -self.max_velocity
 
         while self.env.timestep == prior_time or \
-                abs((prior_pos - self.resolve_object_from_name(object_name)["pos"])[2]) > 0.0001:
+                abs((prior_pos - self.resolve_object_from_name_rel(object_name)["pos"])[2]) > 0.0001:
             if self.env.timestep == prior_time:
                 sleep(1 / 80)
                 continue
             prior_time = self.env.timestep
-            prior_pos = np.array(self.resolve_object_from_name(object_name)["pos"])
+            prior_pos = np.array(self.resolve_object_from_name_rel(object_name)["pos"])
         self.movement = np.zeros(self.action_dim)
         self.open_gripper()
         print(f'placed object "{object_name}"')
 
     def match_orientation_with_offset(self, object_name: str, offset: int) -> None:
+        # maybe needs fixing because of relative coordinates
         """Try to match the orientation of object with given name (and offset) and rotate gripper accordingly"""
         # TODO fix
-        obj = self.resolve_object_from_name(object_name)
-        obj_rot = quat_to_euler(obj["quat"])
+        obj = self.resolve_object_from_name_rel(object_name)
+        obj_rot = obj["rot"]
         robot_pos = self.env.robots[0].base_pos
         # robot_orientation = self.env.robots[0].base_ori
         direction_vector = (np.array(obj["pos"]) - robot_pos)
@@ -323,36 +309,8 @@ class Controller:
         print(angle_to_robot)
 
     def render_coordinate_frame(self, x, y, z, rotation_matrix) -> None:
-        # TODO fix, 375 throws an AttributeError: 'NoneType' object has no attribute 'user_scn'
-        # viewer = self.env.viewer.viewer
-        # viewer.user_scn.ngeom += 1
-        # orient = np.array(
-        #     [
-        #         [1, 0, 0],
-        #         [0, 1, 0],
-        #         [0, 0, 1]
-        #      ], dtype=np.float64
-        # )
-        # mujoco.mjv_initGeom(viewer.user_scn.geoms[viewer.user_scn.ngeom-1], mujoco.mjtGeom.mjGEOM_ARROW, size=np.array([0.01, 0.01, 0.1], dtype=np.float64), pos=np.array([x, y, z], dtype=np.float64), mat=orient.flatten(), rgba=np.array([0, 0 ,1 ,1], dtype=np.float32))
-        # viewer.user_scn.ngeom += 1
-        # orient = np.array(
-        #     [
-        #         [0, 0, 1],
-        #         [0, 1, 0],
-        #         [1, 0, 0]
-        #      ], dtype=np.float64
-        # )
-        # mujoco.mjv_initGeom(viewer.user_scn.geoms[viewer.user_scn.ngeom-1], mujoco.mjtGeom.mjGEOM_ARROW, size=np.array([0.01, 0.01, 0.1], dtype=np.float64), pos=np.array([x, y, z], dtype=np.float64), mat=orient.flatten(), rgba=np.array([1, 0 ,0 ,1], dtype=np.float32))
-        # viewer.user_scn.ngeom += 1
-        # orient = np.array(
-        #     [
-        #         [1, 0, 0],
-        #         [0, 0, 1],
-        #         [0, 1, 0]
-        #      ], dtype=np.float64
-        # )
-        # mujoco.mjv_initGeom(viewer.user_scn.geoms[viewer.user_scn.ngeom-1], mujoco.mjtGeom.mjGEOM_ARROW, size=np.array([0.01, 0.01, 0.1], dtype=np.float64), pos=np.array([x, y, z], dtype=np.float64), mat=orient.flatten(), rgba=np.array([0, 1 ,0 ,1], dtype=np.float32))
-
+        # todo add rotation_matrix
+        sleep(4)
         viewer = self.env.viewer.viewer
         shape = mujoco.mjtGeom.mjGEOM_ARROW
         size = np.array([0.01, 0.01, 0.1], dtype=np.float64)
@@ -401,13 +359,18 @@ if __name__ == "__main__":
     controller = Controller()
     try:
         controller.start()
+        # controller.move_rel(*controller.resolve_object_from_name_rel("obj")["pos"])
 
-        # controller.render_coordinate_frame(*controller.env.robots[0].base_pos, None)
-        controller.approach_destination_from_direction(controller.resolve_object_from_name("obj")["pos"], "front")
-        controller.grip_object_with_rotation_offset("obj", 0)
-        controller.move(*(controller.get_eef_pos() + [0, 0, 0.2]))
+        # distr_counter_pos container_pos obj_container_pos
+        controller.render_coordinate_frame(*controller.env.observation_spec()["distr_counter_pos"], None)
+        controller.render_coordinate_frame(*controller.env.observation_spec()["container_pos"], None)
+        controller.render_coordinate_frame(*controller.env.observation_spec()["obj_container_pos"], None)
+
+        controller.approach_destination_from_direction(controller.resolve_object_from_name_rel("obj")["pos"], "front")
+        # controller.grip_object_with_rotation_offset("obj", 0)
+        # controller.move(*(controller.get_eef_pos_rel() + [0, 0, 0.2]))
         # controller.move(*(controller.env.target_bin_placements[0] + [0, 0, 0.2]))
-        controller.place_object("obj")
+        # controller.place_object("obj")
         controller.stop()
         print("finished simulation")
         pass
