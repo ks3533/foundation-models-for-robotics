@@ -8,7 +8,9 @@ import numpy as np
 import robosuite as suite
 from robosuite.controllers.composite.composite_controller_factory import load_composite_controller_config
 from scipy.spatial.transform import Rotation
+# noinspection PyUnresolvedReferences
 import robocasa  # needed for the environments, doesn't find them otherwise
+import mujoco
 from robocasa.utils.object_utils import compute_rel_transform
 
 import threading
@@ -54,7 +56,7 @@ class Controller:
 
         self.env.viewer.set_camera(camera_id=2)
 
-    def _simulate(self):
+    def _simulate(self) -> None:
         while self.simulation_is_running:
             self.env.step(self.movement)
             self.env.render()
@@ -62,15 +64,15 @@ class Controller:
         self.env.close_renderer()
         self.env.reset()
 
-    def start(self):
+    def start(self) -> None:
         self.simulation_is_running = True
         self.simulation.start()
 
-    def stop(self):
+    def stop(self) -> None:
         self.simulation_is_running = False
         self.simulation.join()
 
-    def move(self, x, y, z):
+    def move(self, x, y, z) -> None:
         print(f"Started moving to {x, y, z}")
         while np.max(abs(np.array([x, y, z]) - self.env.observation_spec()["robot0_eef_pos"])) > 0.02:
             vector = np.array([x, y, z]) - self.env.observation_spec()["robot0_eef_pos"]
@@ -87,41 +89,12 @@ class Controller:
         self.movement = np.zeros(self.action_dim)
         print(f"moved to {x}, {y}, {z}")
 
-    def move_relative_to_robot(self, x, y, z):
+    def move_relative_to_robot(self, x, y, z) -> None:
+        """misleadingly named, actually moves to absolute coordinates, but in a manner that the non-stationary robot
+        can understand"""
         print(f"Started moving to {x, y, z}")
         robot_orientation = self.env.robots[0].base_ori
         object_orientation = numpy.identity(3, dtype=np.float64)
-
-        # import mujoco
-        # viewer = self.env.viewer.viewer
-        # viewer.user_scn.ngeom += 1
-        # print(viewer.user_scn.ngeom)
-        # orient = np.array(
-        #     [
-        #         [1, 0, 0],
-        #         [0, 1, 0],
-        #         [0, 0, 1]
-        #      ], dtype=np.float64
-        # )
-        # mujoco.mjv_initGeom(viewer.user_scn.geoms[viewer.user_scn.ngeom-1], mujoco.mjtGeom.mjGEOM_ARROW, size=np.array([0.01, 0.01, 0.1], dtype=np.float64), pos=np.array([x, y, z], dtype=np.float64), mat=orient.flatten(), rgba=np.array([0, 0 ,1 ,1], dtype=np.float32))
-        # viewer.user_scn.ngeom += 1
-        # orient = np.array(
-        #     [
-        #         [0, 0, 1],
-        #         [0, 1, 0],
-        #         [1, 0, 0]
-        #      ], dtype=np.float64
-        # )
-        # mujoco.mjv_initGeom(viewer.user_scn.geoms[viewer.user_scn.ngeom-1], mujoco.mjtGeom.mjGEOM_ARROW, size=np.array([0.01, 0.01, 0.1], dtype=np.float64), pos=np.array([x, y, z], dtype=np.float64), mat=orient.flatten(), rgba=np.array([1, 0 ,0 ,1], dtype=np.float32))
-        # viewer.user_scn.ngeom += 1
-        # orient = np.array(
-        #     [
-        #         [1, 0, 0],
-        #         [0, 0, 1],
-        #         [0, 1, 0]
-        #      ], dtype=np.float64
-        # )
-        # mujoco.mjv_initGeom(viewer.user_scn.geoms[viewer.user_scn.ngeom-1], mujoco.mjtGeom.mjGEOM_ARROW, size=np.array([0.01, 0.01, 0.1], dtype=np.float64), pos=np.array([x, y, z], dtype=np.float64), mat=orient.flatten(), rgba=np.array([0, 1 ,0 ,1], dtype=np.float32))
 
         while np.max(  # compute the maximum difference of start and goal
                 abs(
@@ -153,7 +126,7 @@ class Controller:
         self.movement = np.zeros(self.action_dim)
         print(f"moved to {x}, {y}, {z}")
 
-    def open_gripper(self):
+    def open_gripper(self) -> None:
         self.movement[6] = -1
         while (self.env.observation_spec()["robot0_gripper_qpos"][0] < 0.0395 or
                self.env.observation_spec()["robot0_gripper_qpos"][1] > -0.0395):
@@ -161,7 +134,7 @@ class Controller:
         self.movement = np.zeros(self.action_dim)
         print("opened gripper")
 
-    def close_gripper(self):
+    def close_gripper(self) -> None:
         self.movement[6] = 1
         while np.max(self.env.observation_spec()["robot0_gripper_qvel"]) < 0.01:
             pass
@@ -170,7 +143,7 @@ class Controller:
         self.movement = np.zeros(self.action_dim)
         print("closed gripper")
 
-    def get_eef_pos(self):
+    def get_eef_pos(self) -> np.ndarray:
         return self.env.observation_spec()["robot0_eef_pos"]
 
     def rotate_gripper_abs(self, end_rotation: Sequence[int]) -> None:
@@ -211,7 +184,7 @@ class Controller:
         """Rotates around one axis using only quaternions"""
 
         if len(end_rotation) == 3:
-            end_rotation = Rotation.from_euler('xyz', end_rotation, degrees=True).as_quat()
+            end_rotation = Rotation.from_euler('xyz', end_rotation, degrees=True).as_quat(False)
         elif len(end_rotation) != 4:
             raise ValueError(f'"values" must be either Euler rotation (3 values) '
                              f'or quaternion (4 values), not {len(end_rotation)} values')
@@ -243,7 +216,8 @@ class Controller:
     def resolve_object_from_name(self, object_name: str) -> dict[str, list]:
         """Finds position and rotation of the object with the given name"""
         observation = self.env.observation_spec()
-        print(f'Resolved "{object_name}" to ("pos": {observation[f"{object_name}_pos"]} "quat": {observation[f"{object_name}_quat"]})')
+        print(f'Resolved "{object_name}" '
+              f'to ("pos": {observation[f"{object_name}_pos"]} "quat": {observation[f"{object_name}_quat"]})')
         return {"pos": observation[f"{object_name}_pos"], "quat": observation[f"{object_name}_quat"]}
 
     def pick_object(self, object_name: str) -> None:
@@ -258,31 +232,25 @@ class Controller:
 
     def approach_destination_from_direction(self, destination: Sequence[int], direction: str):
         # use robot orientation to get the direction vector, then move along every axis except for the given vector
-        # todo fix line 296 or matrices?? further testing required
+        # TODO fix that left/right and front sometimes rotate with the robot inside world coordinate system
         robot_orientation = self.env.robots[0].base_ori
-        object_position = compute_rel_transform(
-            np.zeros(3),
-            robot_orientation,
-            np.array(destination) - self.env.observation_spec()["robot0_eef_pos"],
-            np.identity(3)
-        )[0]
         match direction:
             case "front":
+                matrix = np.array([
+                    [0, 0, 0],
+                    [0, 1, 0],
+                    [0, 0, 1]
+                ])
+            case "left":
                 matrix = np.array([
                     [1, 0, 0],
                     [0, 0, 0],
                     [0, 0, 1]
                 ])
-            case "left":
-                matrix = np.array([
-                    [0, 0, 0],
-                    [0, 1, 0],
-                    [0, 0, 1]
-                ])
             case "right":
                 matrix = np.array([
+                    [1, 0, 0],
                     [0, 0, 0],
-                    [0, 1, 0],
                     [0, 0, 1]
                 ])
             case "up":
@@ -293,7 +261,10 @@ class Controller:
                 ])
             case _:
                 matrix = np.identity(3)
-        # self.move_relative_to_robot(*np.dot(np.dot(matrix, robot_orientation), destination))
+        self.move_relative_to_robot(*(
+            np.dot(matrix, destination)
+            + np.dot(np.identity(3, dtype=int)-matrix, self.env.observation_spec()["robot0_eef_pos"])
+        ))
         self.move_relative_to_robot(*destination)
 
     def grip_object_with_rotation_offset(self, object_name: str, rotation_offset: int):
@@ -351,6 +322,58 @@ class Controller:
         self.rotate_axis([0, 0, (obj_rot[2] % 90)+offset], 2)
         print(angle_to_robot)
 
+    def render_coordinate_frame(self, x, y, z, rotation_matrix) -> None:
+        # TODO fix, 375 throws an AttributeError: 'NoneType' object has no attribute 'user_scn'
+        # viewer = self.env.viewer.viewer
+        # viewer.user_scn.ngeom += 1
+        # orient = np.array(
+        #     [
+        #         [1, 0, 0],
+        #         [0, 1, 0],
+        #         [0, 0, 1]
+        #      ], dtype=np.float64
+        # )
+        # mujoco.mjv_initGeom(viewer.user_scn.geoms[viewer.user_scn.ngeom-1], mujoco.mjtGeom.mjGEOM_ARROW, size=np.array([0.01, 0.01, 0.1], dtype=np.float64), pos=np.array([x, y, z], dtype=np.float64), mat=orient.flatten(), rgba=np.array([0, 0 ,1 ,1], dtype=np.float32))
+        # viewer.user_scn.ngeom += 1
+        # orient = np.array(
+        #     [
+        #         [0, 0, 1],
+        #         [0, 1, 0],
+        #         [1, 0, 0]
+        #      ], dtype=np.float64
+        # )
+        # mujoco.mjv_initGeom(viewer.user_scn.geoms[viewer.user_scn.ngeom-1], mujoco.mjtGeom.mjGEOM_ARROW, size=np.array([0.01, 0.01, 0.1], dtype=np.float64), pos=np.array([x, y, z], dtype=np.float64), mat=orient.flatten(), rgba=np.array([1, 0 ,0 ,1], dtype=np.float32))
+        # viewer.user_scn.ngeom += 1
+        # orient = np.array(
+        #     [
+        #         [1, 0, 0],
+        #         [0, 0, 1],
+        #         [0, 1, 0]
+        #      ], dtype=np.float64
+        # )
+        # mujoco.mjv_initGeom(viewer.user_scn.geoms[viewer.user_scn.ngeom-1], mujoco.mjtGeom.mjGEOM_ARROW, size=np.array([0.01, 0.01, 0.1], dtype=np.float64), pos=np.array([x, y, z], dtype=np.float64), mat=orient.flatten(), rgba=np.array([0, 1 ,0 ,1], dtype=np.float32))
+
+        viewer = self.env.viewer.viewer
+        shape = mujoco.mjtGeom.mjGEOM_ARROW
+        size = np.array([0.01, 0.01, 0.1], dtype=np.float64)
+        position = np.array([x, y, z], dtype=np.float64)
+        axes = np.array([
+            [[1, 0, 0], [0, 1, 0], [0, 0, 1]],
+            [[0, 0, 1], [0, 1, 0], [1, 0, 0]],
+            [[1, 0, 0], [0, 0, 1], [0, 1, 0]]
+        ], dtype=np.float64)
+        colors = np.array([
+            [0, 0, 1, 1],
+            [1, 0, 0, 1],
+            [0, 1, 0, 1]
+        ], dtype=np.float32)
+        for axis, color in zip(axes, colors):
+            viewer.user_scn.ngeom += 1
+            mujoco.mjv_initGeom(viewer.user_scn.geoms[viewer.user_scn.ngeom - 1], shape,
+                                size=size,
+                                pos=position, mat=axis.flatten(),
+                                rgba=color)
+
 
 # def find_best_angle(obj_rot, angle_to_robot):
 #     """Findet den Wert aus obj['pos'] und seinen ±90°/±180° Variationen, der angle_to_robot am nächsten ist."""
@@ -376,13 +399,19 @@ def subtract_angles(angles1, angles2):
 
 if __name__ == "__main__":
     controller = Controller()
-    controller.start()
+    try:
+        controller.start()
 
-    controller.approach_destination_from_direction(controller.resolve_object_from_name("obj")["pos"], "front")
-    controller.grip_object_with_rotation_offset("obj", 0)
-    controller.move(*(controller.get_eef_pos() + [0, 0, 0.2]))
-    # controller.move(*(controller.env.target_bin_placements[0] + [0, 0, 0.2]))
-    controller.place_object("obj")
-    controller.stop()
-    print("finished simulation")
-    pass
+        # controller.render_coordinate_frame(*controller.env.robots[0].base_pos, None)
+        controller.approach_destination_from_direction(controller.resolve_object_from_name("obj")["pos"], "front")
+        controller.grip_object_with_rotation_offset("obj", 0)
+        controller.move(*(controller.get_eef_pos() + [0, 0, 0.2]))
+        # controller.move(*(controller.env.target_bin_placements[0] + [0, 0, 0.2]))
+        controller.place_object("obj")
+        controller.stop()
+        print("finished simulation")
+        pass
+    except KeyboardInterrupt:
+        print("received KeyboardInterrupt, stopping simulation")
+        controller.stop()
+        exit()
