@@ -178,6 +178,8 @@ class Controller:
 
         while True:
             current_quat = self.env.observation_spec()["robot0_eef_quat"]
+            # current_quat = Rotation.from_matrix(np.dot(Rotation.from_quat(self.env.observation_spec()["robot0_eef_quat"]).as_matrix(), self.env.robots[0].base_ori)).as_quat(False)
+
 
             # calculate the rotation required to get from the current rotation to the target rotation and convert it to a vector
             rotation_diff = Rotation.from_quat(end_rotation) * Rotation.from_quat(current_quat).inv()
@@ -214,7 +216,6 @@ class Controller:
     def approach_destination_from_direction(self, destination: Sequence[int], direction: str) -> None:
         """move along every axis except for the given direction, then move to destination
         uses relative coordinates"""
-        # TODO fix that left/right and front sometimes rotate with the robot inside world coordinate system
         match direction:
             case "front":
                 matrix = np.array([
@@ -260,12 +261,24 @@ class Controller:
         pass
 
     def press_button(self) -> None:
-        pass
+        button_pos_abs = self.env.sim.data.get_body_xpos(self.env.microwave.door_name) \
+                         + np.dot(np.array([-0.22, -0.3, -0.105]), self.env.robots[0].base_ori.T)
+        self.render_coordinate_frame(*button_pos_abs, None)
+        button_pos_rel = self.transform_to_robot_frame(button_pos_abs)[0]
+        self.rotate_axis([-180, -90, 0], 1)
+        self.close_gripper()
+        self.move_rel(*(self.get_eef_pos_rel() + [-0.05, 0, 0]))
+        self.approach_destination_from_direction(button_pos_rel, "front")
 
     def open_door(self) -> None:
-        # TODO find handle pos? env.microwave has interesting properties
-        #  maybe use MuJoCo directly to modify env.model, env.sim or similar
-        pass
+        handle_pos_abs = self.env.sim.data.get_body_xpos(self.env.microwave.door_name) \
+                         + np.dot(np.array([-0.22, -0.18, 0]), self.env.robots[0].base_ori.T)
+        self.render_coordinate_frame(*handle_pos_abs, None)
+        handle_pos_rel = self.transform_to_robot_frame(handle_pos_abs)[0]
+        self.rotate_axis([-180, -90, 0], 1)
+        self.move_rel(*(self.get_eef_pos_rel()+[-0.05, 0, 0]))
+        self.approach_destination_from_direction(handle_pos_rel, "front")
+        self.close_gripper()
 
     def close_door(self) -> None:
         pass
@@ -359,17 +372,16 @@ if __name__ == "__main__":
     controller = Controller()
     try:
         controller.start()
-        # controller.move_rel(*controller.resolve_object_from_name_rel("obj")["pos"])
 
-        # distr_counter_pos container_pos obj_container_pos
+        controller.open_door()
         controller.render_coordinate_frame(*controller.env.observation_spec()["distr_counter_pos"], None)
         controller.render_coordinate_frame(*controller.env.observation_spec()["container_pos"], None)
         controller.render_coordinate_frame(*controller.env.observation_spec()["obj_container_pos"], None)
+        controller.open_door()
 
         controller.approach_destination_from_direction(controller.resolve_object_from_name_rel("obj")["pos"], "front")
         # controller.grip_object_with_rotation_offset("obj", 0)
         # controller.move(*(controller.get_eef_pos_rel() + [0, 0, 0.2]))
-        # controller.move(*(controller.env.target_bin_placements[0] + [0, 0, 0.2]))
         # controller.place_object("obj")
         controller.stop()
         print("finished simulation")
