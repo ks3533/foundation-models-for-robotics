@@ -16,9 +16,6 @@ from robocasa.utils.object_utils import compute_rel_transform
 import threading
 
 
-# TODO force kitchen variant
-
-
 class Controller:
     def __init__(self):
         self.max_velocity = 0.2
@@ -31,7 +28,8 @@ class Controller:
             "env_name": "MicrowaveThawing",
             "robots": "PandaOmron",
             "controller_configs": load_composite_controller_config(robot="PandaOmron"),
-
+            "layout_ids": [0],  # change for different kitchen layout
+            "style_ids": [0]  # change for different kitchen style
         }
         self.env = suite.make(
             **options,
@@ -271,14 +269,32 @@ class Controller:
         self.approach_destination_from_direction(button_pos_rel, "front")
 
     def open_door(self) -> None:
-        handle_pos_abs = self.env.sim.data.get_body_xpos(self.env.microwave.door_name) \
-                         + np.dot(np.array([-0.22, -0.18, 0]), self.env.robots[0].base_ori.T)
-        self.render_coordinate_frame(*handle_pos_abs, None)
+        # alternatively self.env.sim.data.get_body_xpos(self.env.microwave.door_name)
+        handle_pos_abs = self.env.microwave.pos + np.dot(np.array([-0.22, -0.18, 0]), self.env.robots[0].base_ori.T)
+        # self.render_coordinate_frame(*handle_pos_abs, None)
+        # controller.env.microwave.pos - controller.env.microwave.size*[-0.21, 0.5, 0]
         handle_pos_rel = self.transform_to_robot_frame(handle_pos_abs)[0]
+        self.open_gripper()
+        self.move_rel(*(self.get_eef_pos_rel()+[-0.1, 0, 0]))
         self.rotate_axis([-180, -90, 0], 1)
-        self.move_rel(*(self.get_eef_pos_rel()+[-0.05, 0, 0]))
         self.approach_destination_from_direction(handle_pos_rel, "front")
         self.close_gripper()
+        joint_pos, _ = self.transform_to_robot_frame(self.env.sim.data.joint(self.env.microwave.joints[0]).xanchor)
+        vector = (self.get_eef_pos_rel()-joint_pos)[:2]
+        vector = vector/np.linalg.norm(vector)
+        while abs(vector[1]) > 0.15:
+            tangential_vector = np.dot(vector, np.array([[0, -1], [1, 0]]))
+            self.movement[0:2] = tangential_vector*self.max_velocity
+
+            vector = (self.get_eef_pos_rel() - joint_pos)[:2]
+            vector = vector / np.linalg.norm(vector)
+
+        # start_time = self.env.timestep
+        # self.movement[0] = -controller.max_velocity
+        # while self.env.timestep-start_time < 500:
+        #     sleep(1/80)
+
+        self.movement = np.zeros(self.action_dim)
 
     def close_door(self) -> None:
         pass
@@ -321,7 +337,7 @@ class Controller:
         self.rotate_axis([0, 0, (obj_rot[2] % 90)+offset], 2)
         print(angle_to_robot)
 
-    def render_coordinate_frame(self, x, y, z, rotation_matrix) -> None:
+    def render_coordinate_frame(self, x, y, z, rotation_matrix=None) -> None:
         # todo add rotation_matrix
         sleep(4)
         viewer = self.env.viewer.viewer
@@ -374,12 +390,8 @@ if __name__ == "__main__":
         controller.start()
 
         controller.open_door()
-        controller.render_coordinate_frame(*controller.env.observation_spec()["distr_counter_pos"], None)
-        controller.render_coordinate_frame(*controller.env.observation_spec()["container_pos"], None)
-        controller.render_coordinate_frame(*controller.env.observation_spec()["obj_container_pos"], None)
-        controller.open_door()
 
-        controller.approach_destination_from_direction(controller.resolve_object_from_name_rel("obj")["pos"], "front")
+        # controller.approach_destination_from_direction(controller.resolve_object_from_name_rel("obj")["pos"], "front")
         # controller.grip_object_with_rotation_offset("obj", 0)
         # controller.move(*(controller.get_eef_pos_rel() + [0, 0, 0.2]))
         # controller.place_object("obj")
