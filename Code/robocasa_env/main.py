@@ -18,8 +18,8 @@ import threading
 
 class Controller:
     def __init__(self):
-        self.max_velocity = 0.2
-        self.min_velocity = 0.02
+        self.max_velocity = 0.3
+        self.min_velocity = 0.03
 
         self.max_angle_velocity = 0.1
         self.min_angle_velocity = 0.01
@@ -81,6 +81,14 @@ class Controller:
         """returns the eef pos relative to the robot"""
         return self.transform_to_robot_frame(self.env.observation_spec()["robot0_eef_pos"])[0]
 
+    def get_eef_rot_rel(self) -> np.ndarray:
+        """returns the eef pos relative to the robot"""
+        return Rotation.from_matrix(
+            self.transform_to_robot_frame(
+                self.env.observation_spec()["robot0_eef_pos"],
+                Rotation.from_quat(self.env.observation_spec()["robot0_eef_quat"]).as_matrix())[1]
+        ).as_euler("xyz")/pi*180
+
     def resolve_object_from_name_rel(self, object_name: str) -> dict[str, list]:
         """finds position and rotation of the object with the given name and returns it in the robot frame"""
         observation = self.env.observation_spec()
@@ -94,7 +102,7 @@ class Controller:
 
     def open_gripper(self) -> None:
         self.movement[6] = -1
-        while (self.env.observation_spec()["robot0_gripper_qpos"][0] < 0.0395 or
+        while (self.env.observation_spec()["robot0_gripper_qpos"][0] < 0.0395 and
                self.env.observation_spec()["robot0_gripper_qpos"][1] > -0.0395):
             pass
         self.movement = np.zeros(self.action_dim)
@@ -130,8 +138,7 @@ class Controller:
         print(f"moved to relative coordinates {x}, {y}, {z}")
 
     def rotate_gripper_abs(self, end_rotation: Sequence[int]) -> None:
-        # maybe needs fixing because of relative coordinates
-        """Rotates the gripper to an absolute end rotation"""
+        """Rotates the gripper to an absolute end rotation relative to the robot frame"""
         # if end_rotation is quaternion, convert it to euler
         if len(end_rotation) == 4:
             end_rotation = quat_to_euler(end_rotation)
@@ -140,16 +147,14 @@ class Controller:
             raise ValueError(f'"values" must either be euler rotation (3 values) '
                              f'or quaternion (4 values), not {len(end_rotation)} values')
         # while the angle differences are bigger than the tolerance
-        while np.max(abs(subtract_angles(end_rotation, quat_to_euler(
-                self.env.observation_spec()["robot0_eef_quat"]))
-                         )) > 0.5:
-            vector = subtract_angles(end_rotation, quat_to_euler(self.env.observation_spec()["robot0_eef_quat"]))
+        while np.max(abs(subtract_angles(end_rotation, self.get_eef_rot_rel()))) > 1:
+            vector = subtract_angles(end_rotation, self.get_eef_rot_rel())
             angle_velocities = []
             for rotation in vector:
                 angle_velocity = 0
                 if abs(rotation) > 5:
                     angle_velocity = self.max_angle_velocity
-                elif abs(rotation) > 2:
+                elif abs(rotation) > 1:
                     angle_velocity = self.min_angle_velocity
                 if rotation < 0:
                     angle_velocity = -angle_velocity
@@ -288,16 +293,24 @@ class Controller:
 
             vector = (self.get_eef_pos_rel() - joint_pos)[:2]
             vector = vector / np.linalg.norm(vector)
-
-        # start_time = self.env.timestep
-        # self.movement[0] = -controller.max_velocity
-        # while self.env.timestep-start_time < 500:
-        #     sleep(1/80)
-
         self.movement = np.zeros(self.action_dim)
+        self.open_gripper()
+        self.move_rel(*(self.get_eef_pos_rel() + [-0.1, 0, 0]))
+        self.move_rel(*(self.get_eef_pos_rel() + [0, -0.25, 0]))
+        self.move_rel(*(self.get_eef_pos_rel() + [0.1, 0, 0]))
+        vector = (self.get_eef_pos_rel()-joint_pos)[:2]
+        vector = vector/np.linalg.norm(vector)
+        # possibly in world coordinates, requires testing
+        self.movement[1] = self.max_velocity
+        while abs(vector[1]) > 0.2:
+            vector = (self.get_eef_pos_rel() - joint_pos)[:2]
+            vector = vector / np.linalg.norm(vector)
+        self.movement = np.zeros(self.action_dim)
+        self.move_rel(*(self.get_eef_pos_rel()+[0.15, -0.1, -0.26]))
 
     def close_door(self) -> None:
-        pass
+        joint_pos, _ = self.transform_to_robot_frame(self.env.sim.data.joint(self.env.microwave.joints[0]).xanchor)
+        # self.move_rel()
 
     def place_object(self, object_name: str) -> None:
         # maybe needs fixing because of relative coordinates
@@ -323,7 +336,7 @@ class Controller:
         """Try to match the orientation of object with given name (and offset) and rotate gripper accordingly"""
         # TODO fix
         obj = self.resolve_object_from_name_rel(object_name)
-        obj_rot = obj["rot"]
+        obj_rot = Rotation.from_matrix(obj["rot"]).as_euler("xyz")
         robot_pos = self.env.robots[0].base_pos
         # robot_orientation = self.env.robots[0].base_ori
         direction_vector = (np.array(obj["pos"]) - robot_pos)
@@ -334,7 +347,7 @@ class Controller:
         #     direction_vector,
         #     np.identity(3)
         # )[0]
-        self.rotate_axis([0, 0, (obj_rot[2] % 90)+offset], 2)
+        self.rotate_axis([0, 0, (obj_rot[2] % 90)-90+offset], 2)
         print(angle_to_robot)
 
     def render_coordinate_frame(self, x, y, z, rotation_matrix=None) -> None:
@@ -389,11 +402,16 @@ if __name__ == "__main__":
     try:
         controller.start()
 
-        controller.open_door()
+        # controller.open_door()
+        # controller.approach_destination_from_direction(
+        #     controller.resolve_object_from_name_rel("obj")["pos"] + [0, 0, 0.15],
+        #     "front"
+        # )
+        controller.rotate_gripper_abs([180, 0, 0])
+        controller.grip_object_with_rotation_offset("obj", 0)
 
-        # controller.approach_destination_from_direction(controller.resolve_object_from_name_rel("obj")["pos"], "front")
-        # controller.grip_object_with_rotation_offset("obj", 0)
-        # controller.move(*(controller.get_eef_pos_rel() + [0, 0, 0.2]))
+        controller.move_rel(*(controller.get_eef_pos_rel() + [0, 0, 0.1]))
+        controller.move_rel(*(controller.get_eef_pos_rel()*[1, 0, 1] + [0, controller.transform_to_robot_frame(controller.env.microwave.pos)[0][1], 0]))
         # controller.place_object("obj")
         controller.stop()
         print("finished simulation")
