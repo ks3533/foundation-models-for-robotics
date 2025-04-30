@@ -258,7 +258,16 @@ class Controller:
         self.open_gripper()
         self.move_rel(*(self.resolve_object_from_name_rel(object_name)["pos"] + [0, 0, 0.1]))
         self.match_orientation_with_offset(object_name, rotation_offset)
-        self.move_rel(*(self.resolve_object_from_name_rel(object_name)["pos"] + [0, 0, 0]))
+        self.move_rel(*(self.resolve_object_from_name_rel(object_name)["pos"] + [0, 0, -0.01]))
+        self.close_gripper()
+        print(f'picked object "{object_name}"')
+        pass
+
+    def grip_object(self, object_name: str) -> None:
+        # maybe needs fixing because of relative coordinates
+        """Opens gripper, moves gripper to the object with the given name, then closes gripper"""
+        self.open_gripper()
+        self.move_rel(*(self.resolve_object_from_name_rel(object_name)["pos"] + [0, 0, -0.01]))
         self.close_gripper()
         print(f'picked object "{object_name}"')
         pass
@@ -307,10 +316,20 @@ class Controller:
             vector = vector / np.linalg.norm(vector)
         self.movement = np.zeros(self.action_dim)
         self.move_rel(*(self.get_eef_pos_rel()+[0.15, -0.1, -0.26]))
+        print("opened door")
 
     def close_door(self) -> None:
         joint_pos, _ = self.transform_to_robot_frame(self.env.sim.data.joint(self.env.microwave.joints[0]).xanchor)
-        # self.move_rel()
+        microwave_pos = self.transform_to_robot_frame(self.env.microwave.pos)[0]
+        self.close_gripper()
+        self.rotate_axis([-180, -90, 0], 1)
+        self.move_rel(*(microwave_pos + [-0.4, 0, -0.05]))
+        self.move_rel(*(microwave_pos + [-0.4, 0, -0.2]))
+        self.approach_destination_from_direction([joint_pos[0]-0.15, joint_pos[1]+0.1, microwave_pos[2]-0.05], "up")
+        self.move_rel(joint_pos[0]-0.15, microwave_pos[1], microwave_pos[2]-0.05)
+        # todo close the door completely
+        self.move_rel(joint_pos[0]-0.05, microwave_pos[1], microwave_pos[2]-0.05)
+        print("closed door")
 
     def place_object(self, object_name: str) -> None:
         # maybe needs fixing because of relative coordinates
@@ -330,6 +349,15 @@ class Controller:
         self.movement = np.zeros(self.action_dim)
         self.open_gripper()
         print(f'placed object "{object_name}"')
+
+    def place_object_at_destination(self, object_name: str, destination_name: str = None) -> None:
+        """Opens gripper and drops object on ground (optionally at destination)"""
+        if destination_name is not None:
+            dest_pos = self.resolve_object_from_name_rel(destination_name)["pos"]
+            self.approach_destination_from_direction(dest_pos + [0, 0, 0.05], "front")
+        self.open_gripper()
+
+        print(f'placed object {object_name}{f" at {destination_name}" if destination_name is not None else ""}')
 
     def match_orientation_with_offset(self, object_name: str, offset: int) -> None:
         # maybe needs fixing because of relative coordinates
@@ -402,17 +430,21 @@ if __name__ == "__main__":
     try:
         controller.start()
 
-        # controller.open_door()
-        # controller.approach_destination_from_direction(
-        #     controller.resolve_object_from_name_rel("obj")["pos"] + [0, 0, 0.15],
-        #     "front"
-        # )
+        controller.close_door()
+
+        controller.open_door()
+
+        controller.approach_destination_from_direction(
+            controller.resolve_object_from_name_rel("obj")["pos"] + [0, 0, 0.15],
+            "front"
+        )
         controller.rotate_gripper_abs([180, 0, 0])
-        controller.grip_object_with_rotation_offset("obj", 0)
+        # controller.grip_object_with_rotation_offset("obj", 0)
+        controller.grip_object("obj")
 
         controller.move_rel(*(controller.get_eef_pos_rel() + [0, 0, 0.1]))
         controller.move_rel(*(controller.get_eef_pos_rel()*[1, 0, 1] + [0, controller.transform_to_robot_frame(controller.env.microwave.pos)[0][1], 0]))
-        # controller.place_object("obj")
+        controller.place_object_at_destination("obj", "container")
         controller.stop()
         print("finished simulation")
         pass
