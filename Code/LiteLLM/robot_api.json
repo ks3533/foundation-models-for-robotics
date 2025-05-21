@@ -1,1 +1,72 @@
-{}
+[
+    {
+        "type": "function",
+        "function": {
+            "name": "get_eef_pos",
+            "description": "Get the current end effector position of the robot in its own frame in the scheme [x,y,z] in meters"
+        }
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "get_eef_rot",
+            "description": "Get the current end effector rotation of the robot in its own frame as an euler rotation in the scheme [x,y,z]"
+        }
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "resolve_object_from_name",
+            "description": "Get the current position of a simulated object 'pos' and rotation 'rot' as a dict",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "object_name": {
+                        "type": "string",
+                        "description": "The name of the object to resolve"
+                    }
+                },
+                "required": ["object_name"]
+            }
+        }
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "open_gripper",
+            "description": "Opens the gripper of the robot"
+        }
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "close_gripper",
+            "description": "Closes the gripper of the robot"
+        }
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "move_abs",
+            "description": "Moves to the specified absolute position relative to the robot frame",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "x": {
+                        "type": "number",
+                        "description": "The x coordinate of the position to move to in meters"
+                    },
+                    "y": {
+                        "type": "number",
+                        "description": "The y coordinate of the position to move to in meters"
+                    },
+                    "z": {
+                        "type": "number",
+                        "description": "The z coordinate of the position to move to in meters"
+                    }
+                },
+                "required": ["x", "y", "z"]
+            }
+        }
+    }
+]

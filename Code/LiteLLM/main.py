@@ -12,16 +12,12 @@ controller.start()
 
 
 # Step 1: send the conversation and available functions to the model
-messages = [{"role": "user", "content": "What's the current robot end effector position?"}]
-tools = [
-    {
-        "type": "function",
-        "function": {
-            "name": "get_eef_pos_rel",
-            "description": "Get the current end effector position of the robot in its own frame in the scheme [x,y,z]",
-        },
-    }
-]
+
+# What's the current robot end effector position and rotation?
+#  What's the position of the object 'obj'?
+#  Also, can you close the gripper, then open it again?
+messages = [{"role": "user", "content": "Can you move to the coordinates that are ten centimetres above the end effector? If so, please procede to do so."}]
+tools = json.loads(open("robot_api.json", "r").read())
 response = litellm.completion(
     model="gpt-4o-mini",
     messages=messages,
@@ -39,8 +35,14 @@ if tool_calls:
     # Step 3: call the function
     # Note: the JSON response may not always be valid; be sure to handle errors
     available_functions = {
-        "get_eef_pos_rel": controller.get_eef_pos_rel,
+        "get_eef_pos": controller.get_eef_pos,
+        "get_eef_rot": controller.get_eef_rot,
+        "resolve_object_from_name": controller.resolve_object_from_name,
+        "open_gripper": controller.open_gripper,
+        "close_gripper": controller.close_gripper,
+        "move_abs": controller.move_abs
     }  # only one function in this example, but you can have multiple
+    assert len(available_functions) == len(tools)
     messages.append(response_message)  # extend conversation with assistant's reply
 
     # Step 4: send the info for each function call and function response to the model
@@ -48,10 +50,7 @@ if tool_calls:
         function_name = tool_call.function.name
         function_to_call = available_functions[function_name]
         function_args = json.loads(tool_call.function.arguments)
-        function_response = function_to_call(
-            # location=function_args.get("location"),
-            # unit=function_args.get("unit"),
-        )
+        function_response = function_to_call(**function_args)
         messages.append(
             {
                 "tool_call_id": tool_call.id,
@@ -65,3 +64,6 @@ if tool_calls:
         messages=messages,
     )  # get a new response from the model where it can see the function response
     print("\nSecond LLM response:\n", second_response)
+
+
+controller.stop()
