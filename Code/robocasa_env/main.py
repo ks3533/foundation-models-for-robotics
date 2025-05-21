@@ -321,10 +321,10 @@ class Controller:
     def close_door(self) -> None:
         joint_pos, _ = self.transform_to_robot_frame(self.env.sim.data.joint(self.env.microwave.joints[0]).xanchor)
         microwave_pos = self.transform_to_robot_frame(self.env.microwave.pos)[0]
-        self.close_gripper()
         self.rotate_axis([-180, -90, 0], 1)
+        # todo fix collision with door (see simulation)
         self.move_rel(*(microwave_pos + [-0.4, 0, -0.05]))
-        self.move_rel(*(microwave_pos + [-0.4, 0, -0.2]))
+        self.move_rel(*(microwave_pos + [-0.4, 0, -0.3])) # maybe change last offset
         self.approach_destination_from_direction([joint_pos[0]-0.15, joint_pos[1]+0.1, microwave_pos[2]-0.05], "up")
         self.move_rel(joint_pos[0]-0.15, microwave_pos[1], microwave_pos[2]-0.05)
         # todo close the door completely
@@ -350,11 +350,11 @@ class Controller:
         self.open_gripper()
         print(f'placed object "{object_name}"')
 
-    def place_object_at_destination(self, object_name: str, destination_name: str = None) -> None:
+    def place_object_at_destination(self, object_name: str, destination_name: str = None, height_offset: int = 0.1, front_offset: int = -0.05) -> None:
         """Opens gripper and drops object on ground (optionally at destination)"""
         if destination_name is not None:
             dest_pos = self.resolve_object_from_name_rel(destination_name)["pos"]
-            self.approach_destination_from_direction(dest_pos + [0, 0, 0.05], "front")
+            self.approach_destination_from_direction(dest_pos + [front_offset, 0, height_offset], "front")
         self.open_gripper()
 
         print(f'placed object {object_name}{f" at {destination_name}" if destination_name is not None else ""}')
@@ -430,8 +430,6 @@ if __name__ == "__main__":
     try:
         controller.start()
 
-        controller.close_door()
-
         controller.open_door()
 
         controller.approach_destination_from_direction(
@@ -444,7 +442,14 @@ if __name__ == "__main__":
 
         controller.move_rel(*(controller.get_eef_pos_rel() + [0, 0, 0.1]))
         controller.move_rel(*(controller.get_eef_pos_rel()*[1, 0, 1] + [0, controller.transform_to_robot_frame(controller.env.microwave.pos)[0][1], 0]))
+        controller.move_rel(*(controller.get_eef_pos_rel() + [-0.12, 0, 0.1]))
+        controller.rotate_gripper_abs([180, -90, 0])
         controller.place_object_at_destination("obj", "container")
+
+        controller.close_door()
+
+        controller.press_button()
+
         controller.stop()
         print("finished simulation")
         pass
