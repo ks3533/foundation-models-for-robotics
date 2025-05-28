@@ -219,7 +219,7 @@ class Controller:
         self.close_gripper()
         print(f'picked object "{object_name}"')
 
-    def approach_destination_from_direction(self, destination: Sequence[int], direction: str) -> None:
+    def approach_destination_from_direction(self, destination: Sequence[float], direction: str) -> None:
         """move along every axis except for the given direction, then move to destination
         uses coordinates relative to the robot frame"""
         match direction:

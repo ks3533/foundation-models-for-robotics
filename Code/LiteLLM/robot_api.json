@@ -68,5 +68,103 @@
                 "required": ["x", "y", "z"]
             }
         }
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "grip_object",
+            "description": "Opens the gripper, moves the gripper to the object with the given name, then closes the gripper",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "object_name": {
+                        "type": "string",
+                        "description": "The name of the object to be picked"
+                    }
+                },
+                "required": ["object_name"]
+            }
+        }
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "press_button",
+            "description": "Presses the button of the microwave"
+        }
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "open_door",
+            "description": "Opens the door of the microwave"
+        }
+    },
+        {
+        "type": "function",
+        "function": {
+            "name": "close_door",
+            "description": "Closes the door of the microwave"
+        }
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "place_object_at_destination",
+            "description": "Opens the gripper and drops the object on ground, optionally at destination",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "object_name": {
+                        "type": "string",
+                        "description": "The name of the object to be placed"
+                    },
+                    "destination_name": {
+                        "type": "string",
+                        "description": "The name of the destination where the object should placed"
+                    },
+                    "height_offset": {
+                        "type": "number",
+                        "description": "The height offset from where to drop the object above the destination in meters"
+                    },
+                    "front_offset": {
+                        "type": "number",
+                        "description": "The offset in the x direction from where to drop the object before/after the destination in meters"
+                    }
+                },
+                "required": ["object_name"]
+            }
+        }
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "approach_destination_from_direction",
+            "description": "Move along every axis except for the given direction, then fully move to destination. Uses coordinates relative to the robot frame",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "destination": {
+                        "type": "array",
+                        "description": "The coordinates of the destination in the format [x, y, z] in meters",
+                        "items": {
+                            "type": "number",
+                            "description": "A singular coordinate"
+                        }
+                    },
+                    "direction": {
+                        "type": "string",
+                        "enum": [
+                            "front",
+                            "left",
+                            "right",
+                            "up"
+                        ],
+                        "description": "The direction in which to move last"
+                    }
+                },
+                "required": ["destination", "direction"]
+            }
+        }
     }
 ]
