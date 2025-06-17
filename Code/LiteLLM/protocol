@@ -1,0 +1,63 @@
+Attempt 1:
+- no reasoning
+- doesn't grip obj correctly
+- doesn't understand the correct order of instructions
+Yielded: grip object, open microwave, move abs (0, 0, -0.25)
+
+Attempt 2:
+- yes reasoning
+- varying attempts to execute task
+- 1:
+    - doesn't grip obj correctly
+    - doesn't understand the correct order of instructions
+    Yielded: grip object, open microwave, then manual abort
+- 2:
+    - resolves object
+    - tries to resolve microwave (error)
+- 3:
+    - doesn't grip obj correctly
+    - wants to put object in microwave, even though closed, because wrong assumption that the door is open
+- 4:
+    - promising start:
+        "To achieve the goal of thawing food in the microwave, the necessary steps are as follows:
+        1. Open the microwave door.
+        2. Grip the object "obj" to pick it up.
+        3. Place the object inside the microwave.
+        4. Close the microwave door.
+        5. Press the button to turn on the microwave.
+        6. Move at least 25 cm away from the object.
+        I will start by opening the microwave door. Proceeding with that step now.
+        Executing the first logical step: opening the door of the microwave."
+    - success with step 1 and 2
+    - error at step 3 while resolving microwave
+Manual fixing of the resolving microwave
+- 5:
+    "1. Open the microwave (container).
+    2. Grip the food object (obj) to pick it up.
+    3. Move to the microwave and place the food inside.
+    4. Close the microwave door.
+    5. Press the button on the microwave to turn it on.
+    6. Finally, move away from the microwave, ensuring I am at least 25 cm away.
+    I'll begin by opening the microwave.
+    Let's execute that step first."
+    - doesn't grip object correctly
+    - tries to move to (0, 0, 0) to move to the microwave, wrong assumption
+Switch to high level subset
+- 6:
+    - fail because approach_destination_from_direction was in the subset (move to (0, 0, 0) indirectly)
+Fix subset
+- 7:
+    - doesn't approach obj well
+    - assumes door is open
+Fix wrong assumption by adding to prompt
+- 8:
+    - excels at the task, except for dropping the object
+    - uses no reasoning messages except for the last step
+    "The operation has been successfully completed. Is there anything else you would like to address or any additional tasks you need assistance with?"
+- 9:
+    - aborted :(
+- 10:
+    - good plan, failed because of code problem
+- 11:
+    - skipped reasoning step(s), yet actually put the object into the microwave
+    - failed because of close_door and the fact that that command still sometimes makes the arm get stuck

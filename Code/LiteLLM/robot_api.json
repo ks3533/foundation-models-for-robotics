@@ -73,7 +73,24 @@
         "type": "function",
         "function": {
             "name": "grip_object",
-            "description": "Opens the gripper, moves the gripper to the object with the given name, then closes the gripper",
+            "description": "Opens the gripper, moves the gripper to the object with the given name, then closes the gripper. The movement always follows a straight line and does not evade hindrances.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "object_name": {
+                        "type": "string",
+                        "description": "The name of the object to be picked"
+                    }
+                },
+                "required": ["object_name"]
+            }
+        }
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "grip_object_from_above",
+            "description": "Opens the gripper, moves the gripper above the object with the given name, then to the object with the given name, then closes the gripper.",
             "parameters": {
                 "type": "object",
                 "properties": {
@@ -164,6 +181,23 @@
                     }
                 },
                 "required": ["destination", "direction"]
+            }
+        }
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "put_down_object_at_current_pos",
+            "description": "Opens the gripper and places the object on the ground at the current position",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "object_name": {
+                        "type": "string",
+                        "description": "The name of the object to be put down"
+                    }
+                },
+                "required": ["object_name"]
             }
         }
     }
