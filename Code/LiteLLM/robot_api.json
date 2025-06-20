@@ -41,14 +41,14 @@
         "type": "function",
         "function": {
             "name": "close_gripper",
-            "description": "Closes the gripper of the robot"
+            "description": "Closes the gripper of the robot and continues to apply force even after closing"
         }
     },
     {
         "type": "function",
         "function": {
             "name": "move_abs",
-            "description": "Moves to the specified absolute position relative to the robot frame",
+            "description": "Moves to the specified absolute position relative to the robot frame. Returns false if it thinks that it's stuck and true otherwise",
             "parameters": {
                 "type": "object",
                 "properties": {
@@ -73,7 +73,7 @@
         "type": "function",
         "function": {
             "name": "grip_object",
-            "description": "Opens the gripper, moves the gripper to the object with the given name, then closes the gripper. The movement always follows a straight line and does not evade hindrances.",
+            "description": "Opens the gripper, moves the gripper to the object with the given name, then closes the gripper. The movement always follows a straight line and does not evade hindrances. Returns false if any of the movements seemed stuck at some point in time, true otherwise",
             "parameters": {
                 "type": "object",
                 "properties": {
@@ -90,7 +90,7 @@
         "type": "function",
         "function": {
             "name": "grip_object_from_above",
-            "description": "Opens the gripper, moves the gripper above the object with the given name, then to the object with the given name, then closes the gripper.",
+            "description": "Opens the gripper, moves the gripper above the object with the given name, then to the object with the given name, then closes the gripper. Returns false if any of the movements seemed stuck at some point in time, true otherwise",
             "parameters": {
                 "type": "object",
                 "properties": {
@@ -107,21 +107,21 @@
         "type": "function",
         "function": {
             "name": "press_button",
-            "description": "Presses the button of the microwave"
+            "description": "Presses the button of the microwave. Returns false if any of the movements seemed stuck at some point in time, true otherwise"
         }
     },
     {
         "type": "function",
         "function": {
             "name": "open_door",
-            "description": "Opens the door of the microwave"
+            "description": "Opens the door of the microwave. Returns false if any of the movements seemed stuck at some point in time, true otherwise"
         }
     },
         {
         "type": "function",
         "function": {
             "name": "close_door",
-            "description": "Closes the door of the microwave"
+            "description": "Closes the door of the microwave. Returns false if any of the movements seemed stuck at some point in time, true otherwise"
         }
     },
     {
@@ -157,7 +157,7 @@
         "type": "function",
         "function": {
             "name": "approach_destination_from_direction",
-            "description": "Move along every axis except for the given direction, then fully move to destination. Uses coordinates relative to the robot frame",
+            "description": "Move along every axis except for the given direction, then fully move to destination. Uses coordinates relative to the robot frame. Returns false if any of the movements seemed stuck at some point in time, true otherwise",
             "parameters": {
                 "type": "object",
                 "properties": {
@@ -199,6 +199,13 @@
                 },
                 "required": ["object_name"]
             }
+        }
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "check_gripping_object",
+            "description": "Checks if the gripper distance is too small to hold an object and the object therefore isn't gripped anymore, then returns true if the object still seems to be there and false otherwise"
         }
     }
 ]

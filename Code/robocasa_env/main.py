@@ -51,14 +51,14 @@ class Controller:
         # consists of xyz-velocities [0:3], xyz-rotation [3:6], gripper [6] and unknown [7:12]
         self.movement = np.zeros(self.action_dim)
 
-        self.simulation_is_running = True
+        self.simulation_is_running = False
 
         self.simulation = threading.Thread(target=self._simulate)
 
         self.env.viewer.set_camera(camera_id=2)
 
     def _simulate(self) -> None:
-        while self.simulation_is_running:
+        while self.simulation_is_running and not self.check_successful():
             self.env.step(self.movement)
             self.env.render()
         # when the simulation is finished
@@ -72,6 +72,15 @@ class Controller:
     def stop(self) -> None:
         self.simulation_is_running = False
         self.simulation.join()
+
+    # maybe add to available commands
+    def check_gripping_object(self) -> bool:
+        return sum(abs(self.env.observation_spec()["robot0_gripper_qpos"])) > 0.0011
+
+    # maybe add to available commands
+    def check_successful(self):
+        # noinspection PyProtectedMember
+        return self.env._check_success()
 
     def transform_to_robot_frame(self, coordinates: Sequence[int], orientation=np.identity(3)) \
             -> (np.ndarray, np.ndarray):
@@ -107,7 +116,7 @@ class Controller:
         while (self.env.observation_spec()["robot0_gripper_qpos"][0] < 0.0395 and
                self.env.observation_spec()["robot0_gripper_qpos"][1] > -0.0395):
             pass
-        self.movement = np.zeros(self.action_dim)
+        self.movement[6] = 0
         print("opened gripper")
 
     def close_gripper(self) -> None:
@@ -117,12 +126,15 @@ class Controller:
             pass
         while np.max(abs(self.env.observation_spec()["robot0_gripper_qvel"])) > 0.01:
             pass
-        self.movement = np.zeros(self.action_dim)
+        # self.movement[6] = 0
         print("closed gripper")
+        # return self.check_gripping_object()
 
-    def move_abs(self, x, y, z) -> None:
+    def move_abs(self, x, y, z) -> bool:
         """move to given coordinates relative to the robot frame"""
         print(f"Started moving to relative coordinates {x, y, z}")
+        prior_vector = None
+        prior_timestep = self.env.timestep
         while np.max(  # compute the maximum difference of start and goal
                 abs(np.array([x, y, z]) - self.get_eef_pos())
         ) > 0.02:
@@ -135,10 +147,18 @@ class Controller:
                 velocity = self.min_velocity
             velocities = vector / distance * velocity
             self.movement[:3] = velocities
-            if self.env.timestep % 20 == 0:
-                print(f"Currently at relative coordinates {self.get_eef_pos()}")
-        self.movement = np.zeros(self.action_dim)
+            # if self.env.timestep % 80 == 0:
+            #     if prior_vector is not None and sum(abs(prior_vector - vector)) < 0.1 \
+            #             and self.env.timestep != prior_timestep:
+            #         return False
+            #     else:
+            #         prior_vector = vector
+            #         prior_timestep = self.env.timestep
+            # if self.env.timestep % 500 == 0:
+            #     print(f"Currently at relative coordinates {self.get_eef_pos()}")
+        self.movement[:3] = np.zeros(3)
         print(f"moved to relative coordinates {x}, {y}, {z}")
+        return True
 
     # TODO add to available commands
     def rotate_gripper_abs(self, end_rotation: Sequence[int]) -> None:
@@ -170,7 +190,7 @@ class Controller:
             if all(v == 0 for v in angle_velocities):
                 break
 
-        self.movement = np.zeros(self.action_dim)
+        self.movement[3:6] = np.zeros(3)
         print(f'rotated gripper to {", ".join([str(rot) for rot in end_rotation])}')
 
     # TODO add to available commands
@@ -206,23 +226,26 @@ class Controller:
 
             self.movement[3:6] = axis_vector
 
-        self.movement = np.zeros(self.action_dim)
+        self.movement[3:6] = np.zeros(3)
         print("done")
 
     # currently unused
     # maybe add to available commands
-    def pick_object(self, object_name: str) -> None:
+    def pick_object(self, object_name: str) -> bool:
         # maybe needs fixing because of relative coordinates
         """Opens gripper, moves gripper to the object with the given name, then closes gripper"""
         self.open_gripper()
         # self.rotate_gripper_abs([90, 90, 0])
-        self.move_abs(*(self.resolve_object_from_name(object_name)["pos"] + [0, 0, 0.1]))
+        if not self.move_abs(*(self.resolve_object_from_name(object_name)["pos"] + [0, 0, 0.1])):
+            return False
         # self.rotate_gripper_abs([90, 90, quat_to_euler(self.resolve_object_from_name(object_name)["quat"])[2] % 90])
-        self.move_abs(*(self.resolve_object_from_name(object_name)["pos"] + [0, 0, 0]))
+        if not self.move_abs(*(self.resolve_object_from_name(object_name)["pos"] + [0, 0, 0])):
+            return False
         self.close_gripper()
         print(f'picked object "{object_name}"')
+        return True
 
-    def approach_destination_from_direction(self, destination: Sequence[float], direction: str) -> None:
+    def approach_destination_from_direction(self, destination: Sequence[float], direction: str) -> bool:
         """move along every axis except for the given direction, then move to destination
         uses coordinates relative to the robot frame"""
         match direction:
@@ -252,54 +275,67 @@ class Controller:
                 ])
             case _:
                 matrix = np.identity(3)
-        self.move_abs(*(
+        if not self.move_abs(*(
                 np.dot(matrix, destination)
                 + np.dot(np.identity(3, dtype=int) - matrix, self.get_eef_pos())
-        ))
-        self.move_abs(*destination)
+        )) or not self.move_abs(*destination):
+            return False
+        return True
 
     # currently unused
     # maybe add to available commands
-    def grip_object_with_rotation_offset(self, object_name: str, rotation_offset: int) -> None:
+    def grip_object_with_rotation_offset(self, object_name: str, rotation_offset: int) -> bool:
         # maybe needs fixing because of relative coordinates
         """Opens gripper, moves gripper to the object with the given name, then closes gripper"""
         self.open_gripper()
-        self.move_abs(*(self.resolve_object_from_name(object_name)["pos"] + [0, 0, 0.1]))
+        if not self.move_abs(*(self.resolve_object_from_name(object_name)["pos"] + [0, 0, 0.1])):
+            return False
         self.match_orientation_with_offset(object_name, rotation_offset)
-        self.move_abs(*(self.resolve_object_from_name(object_name)["pos"] + [0, 0, -0.01]))
+        if not self.move_abs(*(self.resolve_object_from_name(object_name)["pos"] + [0, 0, -0.01])):
+            return False
         self.close_gripper()
         print(f'picked object "{object_name}"')
+        return True
 
-    def grip_object(self, object_name: str) -> None:
+    def grip_object(self, object_name: str) -> bool:
         # maybe needs fixing because of relative coordinates
         """Opens gripper, moves gripper to the object with the given name, then closes gripper"""
         self.open_gripper()
-        self.move_abs(*(self.resolve_object_from_name(object_name)["pos"] + [0, 0, -0.01]))
+        if not self.move_abs(*(self.resolve_object_from_name(object_name)["pos"] + [0, 0, -0.01])):
+            return False
         self.close_gripper()
         print(f'picked object "{object_name}"')
+        return True
 
-    def grip_object_from_above(self, object_name: str) -> None:
+    def grip_object_from_above(self, object_name: str) -> bool:
         # maybe needs fixing because of relative coordinates
         """Opens gripper, moves gripper to the object with the given name, then closes gripper"""
         self.rotate_gripper_abs([180, 0, 0])
         self.open_gripper()
-        self.move_abs(*(self.resolve_object_from_name(object_name)["pos"] + [0, 0, 0.15]))
-        self.move_abs(*(self.resolve_object_from_name(object_name)["pos"] + [0, 0, -0.01]))
+        if (not self.move_abs(*(self.resolve_object_from_name(object_name)["pos"] + [0, 0, 0.15])) or
+                not self.move_abs(*(self.resolve_object_from_name(object_name)["pos"] + [0, 0, -0.01]))):
+            return False
         self.close_gripper()
         print(f'picked object "{object_name}"')
+        return True
 
-    def press_button(self) -> None:
+    def press_button(self) -> bool:
         """presses the button of the microwave"""
         button_pos_abs = self.env.sim.data.get_body_xpos(self.env.microwave.door_name) \
-            + np.dot(np.array([-0.22, -0.3, -0.105]), self.env.robots[0].base_ori.T)
+                         + np.dot(np.array([-0.22, -0.33, -0.105]), self.env.robots[0].base_ori.T)
         self.render_coordinate_frame(*button_pos_abs, None)
         button_pos_rel = self.transform_to_robot_frame(button_pos_abs)[0]
         self.rotate_axis([-180, -90, 0], 1)
         self.close_gripper()
-        self.move_abs(*(self.get_eef_pos() + [-0.05, 0, 0]))
+        if not self.move_abs(*(self.get_eef_pos() + [-0.05, 0, 0])):
+            return False
         self.approach_destination_from_direction(button_pos_rel, "front")
+        self.movement[0] = self.max_velocity
+        sleep(1)
+        self.movement[0] = 0
+        return True
 
-    def open_door(self) -> None:
+    def open_door(self) -> bool:
         """opens the microwave door"""
         # alternatively self.env.sim.data.get_body_xpos(self.env.microwave.door_name)
         handle_pos_abs = self.env.microwave.pos + np.dot(np.array([-0.22, -0.18, 0]), self.env.robots[0].base_ori.T)
@@ -307,7 +343,8 @@ class Controller:
         # controller.env.microwave.pos - controller.env.microwave.size*[-0.21, 0.5, 0]
         handle_pos_rel = self.transform_to_robot_frame(handle_pos_abs)[0]
         self.open_gripper()
-        self.move_abs(*(self.get_eef_pos() + [-0.1, 0, 0]))
+        if not self.move_abs(*(self.get_eef_pos() + [-0.1, 0, 0])):
+            return False
         self.rotate_axis([-180, -90, 0], 1)
         self.approach_destination_from_direction(handle_pos_rel, "front")
         self.close_gripper()
@@ -320,11 +357,12 @@ class Controller:
 
             vector = (self.get_eef_pos() - joint_pos)[:2]
             vector = vector / np.linalg.norm(vector)
-        self.movement = np.zeros(self.action_dim)
+        self.movement[0:2] = np.zeros(2)
         self.open_gripper()
-        self.move_abs(*(self.get_eef_pos() + [-0.1, 0, 0]))
-        self.move_abs(*(self.get_eef_pos() + [0, -0.25, 0]))
-        self.move_abs(*(self.get_eef_pos() + [0.1, 0, 0]))
+        if not (self.move_abs(*(self.get_eef_pos() + [-0.1, 0, 0]))
+                and self.move_abs(*(self.get_eef_pos() + [0, -0.25, 0]))
+                and self.move_abs(*(self.get_eef_pos() + [0.1, 0, 0]))):
+            return False
         vector = (self.get_eef_pos() - joint_pos)[:2]
         vector = vector / np.linalg.norm(vector)
         # possibly in world coordinates, requires testing
@@ -332,25 +370,30 @@ class Controller:
         while abs(vector[1]) > 0.2:
             vector = (self.get_eef_pos() - joint_pos)[:2]
             vector = vector / np.linalg.norm(vector)
-        self.movement = np.zeros(self.action_dim)
-        self.move_abs(*(self.get_eef_pos() + [0.15, -0.1, -0.26]))
+        self.movement[1] = 0
+        if not self.move_abs(*(self.get_eef_pos() + [0.15, -0.1, -0.26])):
+            return False
         print("opened door")
+        return True
 
-    def close_door(self) -> None:
+    def close_door(self) -> bool:
         """closes the microwave door"""
         joint_pos, _ = self.transform_to_robot_frame(self.env.sim.data.joint(self.env.microwave.joints[0]).xanchor)
         microwave_pos = self.transform_to_robot_frame(self.env.microwave.pos)[0]
-        # todo make rotation consistent
-        self.move_abs(*(microwave_pos + [-0.4, 0.1, -0.05]))
-        self.move_abs(*(microwave_pos + [-0.3, 0.1, -0.3]))  # maybe change last offset
-        self.rotate_gripper_abs([-180, -90, 0])
-        self.approach_destination_from_direction([joint_pos[0] - 0.15, joint_pos[1] + 0.2, microwave_pos[2] - 0.05],
-                                                 "up")
-        self.move_abs(joint_pos[0] - 0.15, microwave_pos[1], microwave_pos[2] - 0.05)
+        if not (self.move_abs(*(microwave_pos + [-0.4, 0.1, -0.05]))
+                and self.move_abs(*(microwave_pos + [-0.3, 0.1, -0.3]))):
+            return False
+        self.rotate_axis([-180, -90, 0], 1)
+        self.approach_destination_from_direction(
+            [joint_pos[0] - 0.15, joint_pos[1] + 0.2, microwave_pos[2] - 0.08], "up"
+        )
+        if not self.move_abs(joint_pos[0] - 0.15, microwave_pos[1], microwave_pos[2] - 0.05):
+            return False
         self.movement[0] = self.max_velocity
-        sleep(1)
-        self.movement = np.zeros(self.action_dim)
+        sleep(2)
+        self.movement[0] = 0
         print("closed door")
+        return True
 
     # currently unused in main routine
     def put_down_object_at_current_pos(self, object_name: str) -> None:
@@ -368,7 +411,7 @@ class Controller:
                 continue
             prior_time = self.env.timestep
             prior_pos = np.array(self.resolve_object_from_name(object_name)["pos"])
-        self.movement = np.zeros(self.action_dim)
+        self.movement[2] = 0
         self.open_gripper()
         print(f'placed object "{object_name}"')
 
@@ -386,7 +429,7 @@ class Controller:
     def match_orientation_with_offset(self, object_name: str, offset: int) -> None:
         # maybe needs fixing because of relative coordinates
         """Try to match the orientation of object with given name (and offset) and rotate gripper accordingly"""
-        # TODO fix
+        # maybe fix
         obj = self.resolve_object_from_name(object_name)
         obj_rot = Rotation.from_matrix(obj["rot"]).as_euler("xyz")
         robot_pos = self.env.robots[0].base_pos
@@ -465,7 +508,7 @@ if __name__ == "__main__":
 
         controller.press_button()
 
-        controller.stop()
+        # controller.stop()
         print("finished simulation")
     except KeyboardInterrupt:
         print("received KeyboardInterrupt, stopping simulation")

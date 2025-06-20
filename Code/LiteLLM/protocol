@@ -61,3 +61,24 @@ Fix wrong assumption by adding to prompt
 - 11:
     - skipped reasoning step(s), yet actually put the object into the microwave
     - failed because of close_door and the fact that that command still sometimes makes the arm get stuck
+Remove the necessity of a reasoning message in between from the prompt
+- 12:
+    - dropped food because of bad grip
+- 13:
+    - calls "open_door(object_name=container)" first, so it throws an error
+Add the hint to "think of a plan" beforehand to the prompt
+- 14:
+    - tries to open door, then manual abort
+Add the hint to send the plan as a message
+- 15:
+    - opens door
+    - tries to grip the object, gets stuck on the microwave
+- 16:
+    - opens door, then abort
+Add hint that the AI may pause at any time and the hint that the object falls down often
+
+After adding multiple movement checks, the next three or so attempts didn't work anymore. Fixing the checks
+Temporarily disabled checks
+- 17:
+    - AI successfully finds reasonable method, but object is too big for gripper
+    - AI checks if the object still is gripped after the whole procedure, then wants to open the door again

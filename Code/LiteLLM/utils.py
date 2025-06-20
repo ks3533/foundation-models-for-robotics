@@ -13,6 +13,10 @@ high_level_function_subset = {
     "place_object_at_destination"
 }
 
+control_function_subset = {
+    "check_gripping_object"
+}
+
 
 def all_functions(controller: Controller):
     functions = [
@@ -29,7 +33,8 @@ def all_functions(controller: Controller):
         controller.close_door,
         controller.place_object_at_destination,
         controller.approach_destination_from_direction,
-        controller.put_down_object_at_current_pos
+        controller.put_down_object_at_current_pos,
+        controller.check_gripping_object
     ]
     return {controller_function.__name__: controller_function for controller_function in functions}, \
         json.loads(open("robot_api.json", "r").read())
@@ -44,3 +49,7 @@ def available_function_generator(controller: Controller, available_functions: Un
 
 def high_level_functions(controller: Controller):
     return available_function_generator(controller, high_level_function_subset)
+
+
+def high_level_control_functions(controller: Controller):
+    return available_function_generator(controller, high_level_function_subset.union(control_function_subset))
