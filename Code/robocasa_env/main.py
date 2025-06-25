@@ -35,12 +35,15 @@ class Controller:
         self.env = suite.make(
             **options,
             has_renderer=True,
-            has_offscreen_renderer=False,
+            has_offscreen_renderer=True,
             render_camera=None,
             ignore_done=True,
-            use_camera_obs=False,
+            use_camera_obs=True,
             control_freq=80,
-            renderer="mjviewer"
+            renderer="mjviewer",
+            camera_names="robot0_agentview_center",
+            camera_heights=720,  # Height in pixels
+            camera_widths=1280  # Width in pixels
         )
 
         self.env.reset()
@@ -72,6 +75,9 @@ class Controller:
     def stop(self) -> None:
         self.simulation_is_running = False
         self.simulation.join()
+
+    def get_vision_data(self):
+        return self.env.observation_spec()["robot0_agentview_center_image"]
 
     # maybe add to available commands
     def check_gripping_object(self) -> bool:
