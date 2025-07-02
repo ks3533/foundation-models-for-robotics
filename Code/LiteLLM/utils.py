@@ -1,5 +1,9 @@
+import base64
 import json
+from io import BytesIO
 from typing import Union
+
+from PIL import Image
 
 from Code.robocasa_env.main import Controller
 
@@ -53,3 +57,14 @@ def high_level_functions(controller: Controller):
 
 def high_level_control_functions(controller: Controller):
     return available_function_generator(controller, high_level_function_subset.union(control_function_subset))
+
+
+def get_image(controller: Controller):
+    image = controller.get_vision_data()
+    return Image.fromarray(image)
+
+
+def to_base64_image(image: Image):
+    buffered = BytesIO()
+    image.save(buffered, format="JPEG")
+    return base64.b64encode(buffered.getvalue()).decode("utf-8")

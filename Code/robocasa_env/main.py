@@ -18,7 +18,9 @@ from robocasa.utils.object_utils import compute_rel_transform
 
 
 class Controller:
-    def __init__(self):
+    def __init__(self, headless=False):
+        self.headless = headless
+
         self.max_velocity = 0.3
         self.min_velocity = 0.03
 
@@ -34,7 +36,7 @@ class Controller:
         }
         self.env = suite.make(
             **options,
-            has_renderer=True,
+            has_renderer=not headless,
             has_offscreen_renderer=True,
             render_camera=None,
             ignore_done=True,
@@ -58,12 +60,14 @@ class Controller:
 
         self.simulation = threading.Thread(target=self._simulate)
 
-        self.env.viewer.set_camera(camera_id=2)
+        if not headless:
+            self.env.viewer.set_camera(camera_id=2)
 
     def _simulate(self) -> None:
         while self.simulation_is_running and not self.check_successful():
             self.env.step(self.movement)
-            self.env.render()
+            if not self.headless:
+                self.env.render()
         # when the simulation is finished
         self.env.close_renderer()
         self.env.reset()
@@ -328,8 +332,7 @@ class Controller:
     def press_button(self) -> bool:
         """presses the button of the microwave"""
         button_pos_abs = self.env.sim.data.get_body_xpos(self.env.microwave.door_name) \
-                         + np.dot(np.array([-0.22, -0.33, -0.105]), self.env.robots[0].base_ori.T)
-        self.render_coordinate_frame(*button_pos_abs, None)
+            + np.dot(np.array([-0.22, -0.33, -0.105]), self.env.robots[0].base_ori.T)
         button_pos_rel = self.transform_to_robot_frame(button_pos_abs)[0]
         self.rotate_axis([-180, -90, 0], 1)
         self.close_gripper()
@@ -454,6 +457,8 @@ class Controller:
     # maybe add to available commands
     def render_coordinate_frame(self, x, y, z, rotation_matrix=None) -> None:
         # todo add rotation_matrix
+        if self.headless:
+            return
         sleep(4)
         viewer = self.env.viewer.viewer
         shape = mujoco.mjtGeom.mjGEOM_ARROW

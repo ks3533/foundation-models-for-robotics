@@ -1,0 +1,7 @@
+add vision to model as an option
+- vary model
+- vary detail
+- vary camera?
+add evaluation/logging of images
+evaluate CoT prompting
+evaluate effectiveness of certain prompting

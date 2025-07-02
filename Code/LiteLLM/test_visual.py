@@ -17,17 +17,17 @@ image = controller.get_vision_data()
 buffered = BytesIO()
 Image.fromarray(image).save(buffered, format="JPEG")
 Image.fromarray(image).show()
-b64 = base64.b64encode(buffered.getvalue()).decode("utf-8")
+b64_image = base64.b64encode(buffered.getvalue()).decode("utf-8")
 
 messages = [{"role": "user", "content": [
                             {
                                 "type": "text",
-                                "text": "What’s in this image? Is it upside-down?"
+                                "text": "What’s in this image?"
                             },
                             {
                                 "type": "image_url",
                                 "image_url": {
-                                    "url": f"data:image/jpeg;base64,{b64}", "detail": "high"
+                                    "url": f"data:image/jpeg;base64,{b64_image}", "detail": "high"
                                 }
                             }
                         ]}]
