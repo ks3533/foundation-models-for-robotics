@@ -107,14 +107,14 @@
         "type": "function",
         "function": {
             "name": "press_button",
-            "description": "Presses the button of the microwave. Returns false if any of the movements seemed stuck at some point in time, true otherwise"
+            "description": "Presses the button of the microwave with the closed gripper. Returns false if any of the movements seemed stuck at some point in time, true otherwise"
         }
     },
     {
         "type": "function",
         "function": {
             "name": "open_door",
-            "description": "Opens the door of the microwave. Returns false if any of the movements seemed stuck at some point in time, true otherwise"
+            "description": "Opens the door of the microwave by grasping the handle and pulling. This opens and closes the gripper. Returns false if any of the movements seemed stuck at some point in time, true otherwise"
         }
     },
         {

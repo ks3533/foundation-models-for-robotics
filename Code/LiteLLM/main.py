@@ -1,4 +1,5 @@
 from os import listdir, environ, mkdir
+import os
 from typing import List
 
 import litellm
@@ -6,16 +7,19 @@ import json
 import logging
 from sys import stdout
 
-from Code.LiteLLM.utils import high_level_control_functions, get_image, to_base64_image
+from Code.LiteLLM.utils import high_level_control_functions, get_image, add_image_to_message
 from Code.robocasa_env.main import Controller
 
 environ["OPENAI_API_KEY"] = open("API_KEY", mode="r").read()
 
+batch_name = ''  # leave empty to save in Logs directly
 number_of_logs = sum(1 for f in listdir('Logs'))  # if os.path.isfile(os.path.join('Logs', f))
-mkdir(f"Logs/RobocasaLLM_{number_of_logs}")
+number_of_images = 0
+log_path = os.path.join("Logs", batch_name, f"RobocasaLLM_{number_of_logs}")
+mkdir(log_path)
 
 # file handler
-file_handler = logging.FileHandler(f'Logs/RobocasaLLM_{number_of_logs}/RobocasaLLM.log', mode='w')
+file_handler = logging.FileHandler(os.path.join(log_path, 'RobocasaLLM.log'), mode='w')
 
 # console handler
 console_handler = logging.StreamHandler(stdout)
@@ -28,6 +32,7 @@ logger.addHandler(console_handler)
 logger.propagate = False
 
 vision_enabled = True
+# vision_send_picture_every_tool_call = vision_enabled and True
 headless = True
 
 controller = Controller(headless=headless)
@@ -41,15 +46,12 @@ controller.start()
 system_prompt = {"role": "system", "content": "You may only use one function call per response and have to wait for "
                                               "it to finish that you can potentially react to errors that arise "
                                               "during execution and are returned by the function. If multiple "
-                                              "function calls are provided, only the first one will be executed. "
-                                              "Before you start, explicitly and exhaustively describe the attached "
-                                              "picture, then think of a plan on how to achieve the task and send a "
-                                              "message containing the description and plan. You may pause and think at " 
-                                              "any time."
+                                              "function calls are provided, the execution will fail. "
+                                              f"First,{' describe the image provided, then' if vision_enabled else ''} "
+                                              "think of a plan on how to achieve the task and send a message "
+                                              f"containing the {'image description and ' if vision_enabled else ''}"
+                                              "plan. You may pause and think at any time."
                  }
-
-image = get_image(controller)
-b64_image = to_base64_image(image)
 
 # What's the current robot end effector position and rotation?
 # What's the position of the object 'obj'?
@@ -61,19 +63,17 @@ b64_image = to_base64_image(image)
 messages: List = [system_prompt, {"role": "user", "content": [
     {
         "type": "text",
-        "text": "You are a one-armed robot. Your objective is to thaw food in a microwave. "
+        "text": "You are a one-armed robot with a single gripper. Your objective is to thaw food in a microwave. "
                 "The object is called \"obj\" in the simulation, the microwave is called \"container\". "
                 "In the end, the food should be in the microwave, the microwave should be turned on "
                 "and you should be at least 25 cm away from the object."
     }
 ]}]
 if vision_enabled:
-    messages[1]["content"].append({
-        "type": "image_url",
-        "image_url": {
-            "url": f"data:image/jpeg;base64,{b64_image}", "detail": "high"
-        }
-    })
+    image = get_image(controller)
+    add_image_to_message(messages[1], image)
+    image.save(os.path.join(log_path, f"Image_{number_of_images}.jpg"), format="JPEG")
+    number_of_images += 1
 
 logger.info(f"Using system prompt:\n{system_prompt['content']}\n")
 logger.info(f"Using microwave prompt:\n{messages[1]['content'][0]['text']}")
@@ -83,11 +83,15 @@ assert len(available_functions) == len(tools)
 
 activate_tools = False
 while not controller.check_successful():
-    response = litellm.completion(
-        model="gpt-4o-mini",
-        messages=messages,
-        tools=tools if activate_tools else None,
-    )
+    try:
+        response = litellm.completion(
+            model="gpt-4o",
+            messages=messages,
+            tools=tools if activate_tools else None,
+        )
+    except Exception as e:
+        logger.error(e)
+        raise e
     # response.usage contains tokens
     logger.info(f"\nLLM Response:\n{response.choices[0].message.content}")
     response_message = response.choices[0].message
@@ -131,3 +135,4 @@ while not controller.check_successful():
 
 
 controller.stop()
+logger.info("Task accomplished successfully!")

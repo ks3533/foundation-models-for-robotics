@@ -41,7 +41,7 @@ class Controller:
             render_camera=None,
             ignore_done=True,
             use_camera_obs=True,
-            control_freq=80,
+            control_freq=10,
             renderer="mjviewer",
             camera_names="robot0_agentview_center",
             camera_heights=720,  # Height in pixels

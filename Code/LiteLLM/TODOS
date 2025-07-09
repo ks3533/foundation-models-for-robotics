@@ -5,3 +5,4 @@ add vision to model as an option
 add evaluation/logging of images
 evaluate CoT prompting
 evaluate effectiveness of certain prompting
+fix errors when calling two tools

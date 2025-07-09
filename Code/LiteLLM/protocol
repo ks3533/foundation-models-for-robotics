@@ -82,3 +82,16 @@ Temporarily disabled checks
 - 17:
     - AI successfully finds reasonable method, but object is too big for gripper
     - AI checks if the object still is gripped after the whole procedure, then wants to open the door again
+
+~Introduced automatic logging and forgot to log here :)
+Meanwhile:
+- add vision
+- change the prompt a lot
+Problems:
+- after implementing vision, 4o-mini and 4o failed to reason
+- o4 reasoned better after changing the prompt to say the robot has one gripper and other minor changes (see changes in this commit)
+- tool call duplication with 4o occurred again, resulting in exceptions, needs to be verified with o4-mini
+
+for further evaluation, see the local logs
+
+this version will be used as a baseline, it begins after the local logs RobocasaLLM_18

@@ -68,3 +68,13 @@ def to_base64_image(image: Image):
     buffered = BytesIO()
     image.save(buffered, format="JPEG")
     return base64.b64encode(buffered.getvalue()).decode("utf-8")
+
+
+def add_image_to_message(message: dict, image: Image):
+    b64_image = to_base64_image(image)
+    message["content"].append({
+        "type": "image_url",
+        "image_url": {
+            "url": f"data:image/jpeg;base64,{b64_image}", "detail": "auto"
+        }
+    })
