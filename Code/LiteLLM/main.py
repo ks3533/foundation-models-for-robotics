@@ -1,8 +1,6 @@
-from os import listdir, environ, mkdir
-import os
+from os import environ
 from typing import List
 import argparse
-# TODO clean up the os.path stuff and convert to pathlib
 from pathlib import Path
 
 import litellm
@@ -10,11 +8,12 @@ import json
 import logging
 from sys import stdout
 
-from Code.LiteLLM.utils import high_level_control_functions, get_image, add_image_to_message
+from Code.LiteLLM.utils import high_level_control_functions
+from Code.LiteLLM.image_logger import ImageLogger
 from Code.robocasa_env.main import Controller
 
 cur_dir = Path(__file__).parent
-logs_dir = str(cur_dir / "Logs")
+logs_dir = cur_dir / "Logs"
 
 environ["OPENAI_API_KEY"] = open(cur_dir / "API_KEY", mode="r").read()
 
@@ -22,8 +21,9 @@ parser = argparse.ArgumentParser(
                     prog='AutoBatchRobocasaLLM',
                     description='Executes the given batch with the current configuration')
 
-parser.add_argument('-b', '--batch-name', type=str, default='', nargs=1)
+parser.add_argument('-b', '--batch-name', type=str, default='')
 parser.add_argument('-V', '--vision-enabled', action='store_true')
+parser.add_argument('--vision-legacy', action='store_true')
 parser.add_argument('-m', '--model', default='gpt-4o')
 
 
@@ -31,15 +31,14 @@ args = parser.parse_args()
 
 batch_name = args.batch_name  # leave empty to save in Logs directly
 number_of_logs = sum(
-    1 for f in listdir(logs_dir)
-    if os.path.isfile(os.path.join(logs_dir, f)) and f.split("/")[-1].startswith("RobocasaLLM_")
+    1 for f in logs_dir.iterdir()
+    if f.is_file() and f.name.startswith("RobocasaLLM_")
 )
-number_of_images = 0
-log_path = os.path.join(logs_dir, batch_name, f"RobocasaLLM_{number_of_logs}")
-mkdir(log_path)
+log_path = logs_dir / batch_name / f"RobocasaLLM_{number_of_logs}"
+log_path.mkdir(parents=True)
 
 # file handler
-file_handler = logging.FileHandler(os.path.join(log_path, 'RobocasaLLM.log'), mode='w')
+file_handler = logging.FileHandler(log_path / 'RobocasaLLM.log', mode='w')
 
 # console handler
 console_handler = logging.StreamHandler(stdout)
@@ -51,15 +50,18 @@ logger.addHandler(file_handler)
 logger.addHandler(console_handler)
 logger.propagate = False
 
-vision_enabled = args.vision_enabled
+vision_legacy = args.vision_legacy
+vision_enabled = not vision_legacy and args.vision_enabled
 # vision_send_picture_every_tool_call = vision_enabled and True
 headless = True
 
-with open(os.path.join(log_path, "args.json"), mode="w") as args_file:
+with open(log_path / "args.json", mode="w") as args_file:
     json.dump(vars(args), args_file)
 
 controller = Controller(headless=headless)
 controller.start()
+
+image_logger = ImageLogger(controller, log_path)
 
 # You may only use one function call per response and have to wait for it to finish that you can potentially react to
 #  errors that arise during execution and are returned by the function. If multiple function calls are provided, only
@@ -70,17 +72,12 @@ system_prompt = {"role": "system", "content": "You may only use one function cal
                                               "it to finish that you can potentially react to errors that arise "
                                               "during execution and are returned by the function. If multiple "
                                               "function calls are provided, the execution will fail. "
-                                              f"First,{' describe the image provided, then' if vision_enabled else ''} "
+                                              f"First,{' describe the image provided, then' if vision_legacy else ''} "
                                               "think of a plan on how to achieve the task and send a message "
-                                              f"containing the {'image description and ' if vision_enabled else ''}"
+                                              f"containing the {'image description and ' if vision_legacy else ''}"
                                               "plan. You may pause and think at any time."
                  }
 
-# What's the current robot end effector position and rotation?
-# What's the position of the object 'obj'?
-# Also, can you close the gripper, then open it again?
-# Can you move to the coordinates that are ten centimetres above the end effector? If so, please proceed to do so.
-# Can you press the button of the microwave?
 # The microwave door is closed.
 # You should regularly check if the object didn't fall down, as that may happen often.
 messages: List = [system_prompt, {"role": "user", "content": [
@@ -90,14 +87,11 @@ messages: List = [system_prompt, {"role": "user", "content": [
                 "The object is called \"obj\" in the simulation, the microwave is called \"container\". "
                 "In the end, the food should be in the microwave, the microwave should be turned on "
                 "and you should be at least 25 cm away from the object."
-                f"{' The microwave door is closed.' if not vision_enabled else ''}"
+                f"{' The microwave door is closed.' if not vision_legacy and not vision_enabled else ''}"
     }
 ]}]
-if vision_enabled:
-    image = get_image(controller)
-    add_image_to_message(messages[1], image)
-    image.save(os.path.join(log_path, f"Image_{number_of_images}.jpg"), format="JPEG")
-    number_of_images += 1
+if vision_legacy:
+    image_logger.add_current_scene_to_message(messages[1])
 
 logger.info(f"Using system prompt:\n{system_prompt['content']}\n")
 logger.info(f"Using microwave prompt:\n{messages[1]['content'][0]['text']}")

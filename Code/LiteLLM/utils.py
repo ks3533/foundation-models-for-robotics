@@ -57,24 +57,3 @@ def high_level_functions(controller: Controller):
 
 def high_level_control_functions(controller: Controller):
     return available_function_generator(controller, high_level_function_subset.union(control_function_subset))
-
-
-def get_image(controller: Controller):
-    image = controller.get_vision_data()
-    return Image.fromarray(image)
-
-
-def to_base64_image(image: Image):
-    buffered = BytesIO()
-    image.save(buffered, format="JPEG")
-    return base64.b64encode(buffered.getvalue()).decode("utf-8")
-
-
-def add_image_to_message(message: dict, image: Image):
-    b64_image = to_base64_image(image)
-    message["content"].append({
-        "type": "image_url",
-        "image_url": {
-            "url": f"data:image/jpeg;base64,{b64_image}", "detail": "auto"
-        }
-    })
