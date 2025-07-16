@@ -1,6 +1,9 @@
 from os import listdir, environ, mkdir
 import os
 from typing import List
+import argparse
+# TODO clean up the os.path stuff and convert to pathlib
+from pathlib import Path
 
 import litellm
 import json
@@ -10,12 +13,29 @@ from sys import stdout
 from Code.LiteLLM.utils import high_level_control_functions, get_image, add_image_to_message
 from Code.robocasa_env.main import Controller
 
-environ["OPENAI_API_KEY"] = open("API_KEY", mode="r").read()
+cur_dir = Path(__file__).parent
+logs_dir = str(cur_dir / "Logs")
 
-batch_name = ''  # leave empty to save in Logs directly
-number_of_logs = sum(1 for f in listdir('Logs'))  # if os.path.isfile(os.path.join('Logs', f))
+environ["OPENAI_API_KEY"] = open(cur_dir / "API_KEY", mode="r").read()
+
+parser = argparse.ArgumentParser(
+                    prog='AutoBatchRobocasaLLM',
+                    description='Executes the given batch with the current configuration')
+
+parser.add_argument('-b', '--batch-name', type=str, default='', nargs=1)
+parser.add_argument('-V', '--vision-enabled', action='store_true')
+parser.add_argument('-m', '--model', default='gpt-4o')
+
+
+args = parser.parse_args()
+
+batch_name = args.batch_name  # leave empty to save in Logs directly
+number_of_logs = sum(
+    1 for f in listdir(logs_dir)
+    if os.path.isfile(os.path.join(logs_dir, f)) and f.split("/")[-1].startswith("RobocasaLLM_")
+)
 number_of_images = 0
-log_path = os.path.join("Logs", batch_name, f"RobocasaLLM_{number_of_logs}")
+log_path = os.path.join(logs_dir, batch_name, f"RobocasaLLM_{number_of_logs}")
 mkdir(log_path)
 
 # file handler
@@ -31,9 +51,12 @@ logger.addHandler(file_handler)
 logger.addHandler(console_handler)
 logger.propagate = False
 
-vision_enabled = True
+vision_enabled = args.vision_enabled
 # vision_send_picture_every_tool_call = vision_enabled and True
 headless = True
+
+with open(os.path.join(log_path, "args.json"), mode="w") as args_file:
+    json.dump(vars(args), args_file)
 
 controller = Controller(headless=headless)
 controller.start()
@@ -67,6 +90,7 @@ messages: List = [system_prompt, {"role": "user", "content": [
                 "The object is called \"obj\" in the simulation, the microwave is called \"container\". "
                 "In the end, the food should be in the microwave, the microwave should be turned on "
                 "and you should be at least 25 cm away from the object."
+                f"{' The microwave door is closed.' if not vision_enabled else ''}"
     }
 ]}]
 if vision_enabled:
@@ -82,15 +106,17 @@ available_functions, tools = high_level_control_functions(controller)
 assert len(available_functions) == len(tools)
 
 activate_tools = False
-while not controller.check_successful():
+used_tool_calls = []
+while not controller.check_successful() and len(messages) <= 12:  # fixed limit of ten messages + sys + user
     try:
         response = litellm.completion(
-            model="gpt-4o",
+            model=args.model,
             messages=messages,
             tools=tools if activate_tools else None,
         )
     except Exception as e:
-        logger.error(e)
+        logger.error(f"Execution failed and yielded following error:\n{e}")
+        logger.info("ERROR")
         raise e
     # response.usage contains tokens
     logger.info(f"\nLLM Response:\n{response.choices[0].message.content}")
@@ -128,11 +154,26 @@ while not controller.check_successful():
                 "content": str(function_response),
             }
         )  # extend conversation with function response
+
+        used_tool_calls.append(tool_call)
     else:
         logger.info("LLM is reasoning")
         logger.info(f"\nLLM Reasoning:\n{response.choices[0].message.content}")
         activate_tools = True
 
-
+if controller.check_successful():
+    logger.info("Task accomplished successfully!")
+    logger.info("SUCCESS")
+else:
+    logger.info("Task failed after ten messages...\n"
+                "Current State:\n"
+                f"Object inside the microwave: {controller.check_object_in_microwave()}\n"
+                f"Microwave button was pressed: {controller.check_button_pressed()}"
+                f"Gripper is at least 25cm away from the door: {controller.check_gripper_away_from_microwave()}\n")
+    logger.info("Manually check if the procedure was correct:")
+    for tool_call in used_tool_calls:
+        name = tool_call.function.name
+        args = json.loads(tool_call.function.arguments)
+        logger.info(f"{name}({', '.join([f'{arg}={val}' for arg, val in args.items()])})")
+    logger.info("FAIL")
 controller.stop()
-logger.info("Task accomplished successfully!")

@@ -14,7 +14,7 @@ from robosuite.controllers.composite.composite_controller_factory import load_co
 
 # noinspection PyUnresolvedReferences
 import robocasa  # needed for the environments, doesn't find them otherwise
-from robocasa.utils.object_utils import compute_rel_transform
+from robocasa.utils.object_utils import compute_rel_transform, obj_inside_of, gripper_obj_far
 
 
 class Controller:
@@ -87,10 +87,20 @@ class Controller:
     def check_gripping_object(self) -> bool:
         return sum(abs(self.env.observation_spec()["robot0_gripper_qpos"])) > 0.0011
 
+    def check_object_in_microwave(self):
+        return obj_inside_of(self.env, "obj", self.env.microwave)
+
+    def check_button_pressed(self):
+        return self.env.microwave.get_state()["turned_on"]
+
+    def check_gripper_away_from_microwave(self):
+        return gripper_obj_far(self)
+
     # maybe add to available commands
     def check_successful(self):
-        # noinspection PyProtectedMember
-        return self.env._check_success()
+        return self.check_object_in_microwave() \
+            and self.check_button_pressed() \
+            and self.check_gripper_away_from_microwave()
 
     def transform_to_robot_frame(self, coordinates: Sequence[int], orientation=np.identity(3)) \
             -> (np.ndarray, np.ndarray):
