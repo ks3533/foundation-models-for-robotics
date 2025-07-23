@@ -1,9 +1,6 @@
-import base64
 import json
-from io import BytesIO
+from pathlib import Path
 from typing import Union
-
-from PIL import Image
 
 from Code.robocasa_env.main import Controller
 
@@ -20,6 +17,8 @@ high_level_function_subset = {
 control_function_subset = {
     "check_gripping_object"
 }
+
+cur_dir = Path(__file__).parent
 
 
 def all_functions(controller: Controller):
@@ -41,7 +40,7 @@ def all_functions(controller: Controller):
         controller.check_gripping_object
     ]
     return {controller_function.__name__: controller_function for controller_function in functions}, \
-        json.loads(open("robot_api.json", "r").read())
+        json.loads(open(cur_dir / "robot_api.json", "r").read())
 
 
 # generates a set of available functions specific to the given controller instance from a set or list of function names

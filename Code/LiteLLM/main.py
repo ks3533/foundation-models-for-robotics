@@ -24,17 +24,21 @@ parser = argparse.ArgumentParser(
 parser.add_argument('-b', '--batch-name', type=str, default='')
 parser.add_argument('-V', '--vision-enabled', action='store_true')
 parser.add_argument('--vision-legacy', action='store_true')
-parser.add_argument('-m', '--model', default='gpt-4o')
+parser.add_argument('-m', '--model', default='o4-mini')
+parser.add_argument('-r', '--renderer', action='store_true')
+parser.add_argument('-p', '--log-pictures', action='store_true')
 
 
 args = parser.parse_args()
 
 batch_name = args.batch_name  # leave empty to save in Logs directly
+batch_path = logs_dir / batch_name
+batch_path.mkdir(parents=True, exist_ok=True)
 number_of_logs = sum(
-    1 for f in logs_dir.iterdir()
-    if f.is_file() and f.name.startswith("RobocasaLLM_")
+    1 for f in batch_path.iterdir()
+    if f.is_dir() and f.name.startswith("RobocasaLLM_")
 )
-log_path = logs_dir / batch_name / f"RobocasaLLM_{number_of_logs}"
+log_path = batch_path / f"RobocasaLLM_{number_of_logs}"
 log_path.mkdir(parents=True)
 
 # file handler
@@ -53,7 +57,7 @@ logger.propagate = False
 vision_legacy = args.vision_legacy
 vision_enabled = not vision_legacy and args.vision_enabled
 # vision_send_picture_every_tool_call = vision_enabled and True
-headless = True
+headless = not args.renderer
 
 with open(log_path / "args.json", mode="w") as args_file:
     json.dump(vars(args), args_file)
@@ -80,16 +84,18 @@ system_prompt = {"role": "system", "content": "You may only use one function cal
 
 # The microwave door is closed.
 # You should regularly check if the object didn't fall down, as that may happen often.
-messages: List = [system_prompt, {"role": "user", "content": [
-    {
-        "type": "text",
-        "text": "You are a one-armed robot with a single gripper. Your objective is to thaw food in a microwave. "
-                "The object is called \"obj\" in the simulation, the microwave is called \"container\". "
-                "In the end, the food should be in the microwave, the microwave should be turned on "
-                "and you should be at least 25 cm away from the object."
-                f"{' The microwave door is closed.' if not vision_legacy and not vision_enabled else ''}"
-    }
-]}]
+user_prompt = {"role": "user", "content": [
+        {
+            "type": "text",
+            "text": "You are a one-armed robot with a single gripper. Your objective is to thaw food in a microwave. "
+                    "The object is called \"obj\" in the simulation, the microwave is called \"container\". "
+                    "In the end, the food should be in the microwave, the microwave should be turned on "
+                    "and you should be at least 25 cm away from the object."
+                    f"{' The microwave door is closed.' if not vision_legacy and not vision_enabled else ''}"
+        }
+    ]
+}
+messages: List = [system_prompt, user_prompt]
 if vision_legacy:
     image_logger.add_current_scene_to_message(messages[1])
 
@@ -124,13 +130,15 @@ while not controller.check_successful() and len(messages) <= 12:  # fixed limit 
     if tool_calls:
         logger.info("LLM wants to execute tool calls")
         logger.info("\nTool calls:")
-        for n, tool_call in enumerate(tool_calls):
+        for n, tool_call in enumerate(tool_calls[:]):  # create a copy of tool_calls
             name = tool_call.function.name
-            args = json.loads(tool_call.function.arguments)
+            f_args = json.loads(tool_call.function.arguments)
             color = "\033[36m"
             reset = "\033[0m"
             logger.info(f"{color + 'Will not be executed: ' if n > 0 else ''}"
-                        f"{name}({', '.join([f'{arg}={val}' for arg, val in args.items()])}){reset if n > 0 else ''}")
+                        f"{name}({', '.join([f'{arg}={val}' for arg, val in f_args.items()])}){reset if n > 0 else ''}")
+            if n > 0:
+                tool_calls.pop()  # pop one element for each element after the first one
 
         # Step 3: call the function
 
@@ -154,6 +162,8 @@ while not controller.check_successful() and len(messages) <= 12:  # fixed limit 
         logger.info("LLM is reasoning")
         logger.info(f"\nLLM Reasoning:\n{response.choices[0].message.content}")
         activate_tools = True
+    if vision_legacy or vision_enabled or args.log_pictures:
+        image_logger.get_image()
 
 if controller.check_successful():
     logger.info("Task accomplished successfully!")
@@ -162,7 +172,7 @@ else:
     logger.info("Task failed after ten messages...\n"
                 "Current State:\n"
                 f"Object inside the microwave: {controller.check_object_in_microwave()}\n"
-                f"Microwave button was pressed: {controller.check_button_pressed()}"
+                f"Microwave button was pressed: {controller.check_button_pressed()}\n"
                 f"Gripper is at least 25cm away from the door: {controller.check_gripper_away_from_microwave()}\n")
     logger.info("Manually check if the procedure was correct:")
     for tool_call in used_tool_calls:

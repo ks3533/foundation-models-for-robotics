@@ -6,7 +6,7 @@ batch_size=5
 
 # Define combined argument sets
 configs=(
-  "-b test"
+  "-b no_vision_gpt-o4 -r"
 )
 
 cd ..
@@ -16,6 +16,7 @@ for config in "${configs[@]}"; do
   echo "Running: python $python_script $config"
   for ((i = 1; i <= batch_size; i++)); do
       echo "Iteration $i"
-      python "$python_script" "$config"
+      # shellcheck disable=SC2086
+      python "$python_script" $config
   done
 done

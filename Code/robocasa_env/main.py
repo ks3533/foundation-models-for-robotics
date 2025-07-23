@@ -41,7 +41,7 @@ class Controller:
             render_camera=None,
             ignore_done=True,
             use_camera_obs=True,
-            control_freq=10,
+            control_freq=80,
             renderer="mjviewer",
             camera_names="robot0_agentview_center",
             camera_heights=720,  # Height in pixels
@@ -69,7 +69,8 @@ class Controller:
             if not self.headless:
                 self.env.render()
         # when the simulation is finished
-        self.env.close_renderer()
+        if not self.headless:
+            self.env.close_renderer()
         self.env.reset()
 
     def start(self) -> None:
@@ -94,7 +95,7 @@ class Controller:
         return self.env.microwave.get_state()["turned_on"]
 
     def check_gripper_away_from_microwave(self):
-        return gripper_obj_far(self)
+        return gripper_obj_far(self.env)
 
     # maybe add to available commands
     def check_successful(self):
