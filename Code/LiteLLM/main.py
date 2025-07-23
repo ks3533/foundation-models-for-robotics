@@ -11,6 +11,7 @@ from sys import stdout
 from Code.LiteLLM.utils import high_level_control_functions
 from Code.LiteLLM.image_logger import ImageLogger
 from Code.robocasa_env.main import Controller
+from Code.LiteLLM.scene_description import get_scene_description
 
 cur_dir = Path(__file__).parent
 logs_dir = cur_dir / "Logs"
@@ -56,7 +57,7 @@ logger.propagate = False
 
 vision_legacy = args.vision_legacy
 vision_enabled = not vision_legacy and args.vision_enabled
-# vision_send_picture_every_tool_call = vision_enabled and True
+vision_send_picture_every_tool_call = vision_legacy and True
 headless = not args.renderer
 
 with open(log_path / "args.json", mode="w") as args_file:
@@ -67,34 +68,62 @@ controller.start()
 
 image_logger = ImageLogger(controller, log_path)
 
-# You may only use one function call per response and have to wait for it to finish that you can potentially react to
-#  errors that arise during execution and are returned by the function. If multiple function calls are provided, only
-#  the first one will be executed.
-# Before attempting to call a function, send one message reasoning which step would be useful to achieve your goal.
-#  Afterward, execute the next logical step.
-system_prompt = {"role": "system", "content": "You may only use one function call per response and have to wait for "
-                                              "it to finish that you can potentially react to errors that arise "
-                                              "during execution and are returned by the function. If multiple "
-                                              "function calls are provided, the execution will fail. "
-                                              f"First,{' describe the image provided, then' if vision_legacy else ''} "
-                                              "think of a plan on how to achieve the task and send a message "
-                                              f"containing the {'image description and ' if vision_legacy else ''}"
-                                              "plan. You may pause and think at any time."
-                 }
+if vision_enabled:
+    scene_description = get_scene_description(image_logger, args.model)
+    system_prompt = {"role": "system",
+                     "content": "You may only use one function call per response and have to wait for "
+                                "it to finish that you can potentially react to errors that arise "
+                                "during execution and are returned by the function. If multiple "
+                                "function calls are provided, only the first one will be executed. "
+                                "You will get a scene description from the user, given this description, "
+                                "think of a plan on how to achieve the task and send a message "
+                                "containing the plan. Afterwards, begin with the execution. You may pause and think at "
+                                "any time."
+                     }
 
-# The microwave door is closed.
-# You should regularly check if the object didn't fall down, as that may happen often.
-user_prompt = {"role": "user", "content": [
+    user_prompt = {"role": "user", "content": [
         {
             "type": "text",
-            "text": "You are a one-armed robot with a single gripper. Your objective is to thaw food in a microwave. "
+            "text": f"Here's a scene description:\n {scene_description}\n"
+                    "You are the robot. Your objective is to thaw food in a microwave. "
+                    "The object is called \"obj\" in the simulation, the microwave is called \"container\". "
+                    "In the end, the food should be in the microwave, the microwave should be turned on "
+                    "and you should be at least 25 cm away from the object. "
+                    "After formulating your plan, immediately begin execution."
+        }
+    ]
+                   }
+else:
+    # You may only use one function call per response and have to wait for it to finish that you can potentially react
+    #  to errors that arise during execution and are returned by the function.
+    # Before attempting to call a function, send one message reasoning which step would be useful to achieve your goal.
+    #  Afterward, execute the next logical step.
+    system_prompt = {"role": "system", "content":
+                     "You may only use one function call per response and have to wait for "
+                     "it to finish that you can potentially react to errors that arise "
+                     "during execution and are returned by the function. If multiple "
+                     "function calls are provided, only the first one will be executed. "
+                     f"First,{' describe the image provided, then' if vision_legacy else ''} "
+                     "think of a plan on how to achieve the task and send a message "
+                     f"containing the {'image description and ' if vision_legacy else ''}"
+                     "plan. Afterwards, begin with the execution. You may pause and think at "
+                     "any time."
+                     }
+
+    # The microwave door is closed.
+    # You should regularly check if the object didn't fall down, as that may happen often.
+    user_prompt = {"role": "user", "content": [
+            {
+                "type": "text",
+                "text":
+                    "You are a one-armed robot with a single gripper. Your objective is to thaw food in a microwave. "
                     "The object is called \"obj\" in the simulation, the microwave is called \"container\". "
                     "In the end, the food should be in the microwave, the microwave should be turned on "
                     "and you should be at least 25 cm away from the object."
                     f"{' The microwave door is closed.' if not vision_legacy and not vision_enabled else ''}"
-        }
-    ]
-}
+            }
+        ]
+    }
 messages: List = [system_prompt, user_prompt]
 if vision_legacy:
     image_logger.add_current_scene_to_message(messages[1])
@@ -163,7 +192,16 @@ while not controller.check_successful() and len(messages) <= 12:  # fixed limit 
         logger.info(f"\nLLM Reasoning:\n{response.choices[0].message.content}")
         activate_tools = True
     if vision_legacy or vision_enabled or args.log_pictures:
-        image_logger.get_image()
+        image = image_logger.get_image()
+        if vision_send_picture_every_tool_call:
+            message = {"role": "user", "content": [
+                {
+                    "type": "text",
+                    "text": "This is the current scene, you may continue the task according to the situation after "
+                            "checking if everything is correct."}
+            ]}
+            image_logger.add_image_to_message(message, image)
+            messages.append(message)
 
 if controller.check_successful():
     logger.info("Task accomplished successfully!")

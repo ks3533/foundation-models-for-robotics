@@ -15,9 +15,9 @@ class ImageLogger:
         self.number_of_images = 0
 
     def get_image(self):
-        image = self.controller.get_vision_data()
+        image = Image.fromarray(self.controller.get_vision_data())
         self.save_image(image)
-        return Image.fromarray(image)
+        return image
 
     @staticmethod
     def to_base64_image(image: Image):
@@ -40,7 +40,7 @@ class ImageLogger:
         })
 
     def add_current_scene_to_message(self, message: dict):
-        ImageLogger.add_image_to_message(message, self.get_base64_image())
+        ImageLogger.add_image_to_message(message, self.get_image())
 
     def save_image(self, image: Image):
         image.save(self.log_path / f"Image_{self.number_of_images}.jpg", format="JPEG")

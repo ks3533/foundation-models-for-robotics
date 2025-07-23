@@ -41,7 +41,7 @@ class Controller:
             render_camera=None,
             ignore_done=True,
             use_camera_obs=True,
-            control_freq=80,
+            control_freq=20,
             renderer="mjviewer",
             camera_names="robot0_agentview_center",
             camera_heights=720,  # Height in pixels
@@ -331,11 +331,10 @@ class Controller:
     def grip_object_from_above(self, object_name: str) -> bool:
         # maybe needs fixing because of relative coordinates
         """Opens gripper, moves gripper to the object with the given name, then closes gripper"""
-        self.rotate_gripper_abs([180, 0, 0])
         self.open_gripper()
-        if (not self.move_abs(*(self.resolve_object_from_name(object_name)["pos"] + [0, 0, 0.15])) or
-                not self.move_abs(*(self.resolve_object_from_name(object_name)["pos"] + [0, 0, -0.01]))):
-            return False
+        self.move_abs(*(self.resolve_object_from_name(object_name)["pos"] + [0, 0, 0.15]))
+        self.rotate_gripper_abs([180, 0, 0])
+        self.move_abs(*(self.resolve_object_from_name(object_name)["pos"] + [0, 0, -0.01]))
         self.close_gripper()
         print(f'picked object "{object_name}"')
         return True
