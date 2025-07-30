@@ -41,7 +41,7 @@ class Controller:
             render_camera=None,
             ignore_done=True,
             use_camera_obs=True,
-            control_freq=20,
+            control_freq=10,
             renderer="mjviewer",
             camera_names="robot0_agentview_center",
             camera_heights=720,  # Height in pixels
@@ -523,6 +523,8 @@ if __name__ == "__main__":
             controller.env.microwave.pos)[0][1], 0]))
         controller.move_abs(*(controller.get_eef_pos() + [-0.12, 0, 0.1]))
         controller.rotate_gripper_abs([180, -90, 0])
+        # controller.rotate_gripper_abs([180, 0, -90])
+        # controller.rotate_axis([180, -90, -90], 1)
         controller.place_object_at_destination("obj", "container")
 
         controller.close_door()
