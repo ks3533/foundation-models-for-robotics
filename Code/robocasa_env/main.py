@@ -439,6 +439,12 @@ class Controller:
         """Opens gripper and drops object on ground (optionally at destination)"""
         if destination_name is not None:
             dest_pos = self.resolve_object_from_name(destination_name)["pos"]
+            matrix = np.array([
+                [0, 0, 0],
+                [0, 1, 0],
+                [0, 0, 0]
+            ])
+            self.move_abs(*(np.dot(self.get_eef_pos()+[0,0,height_offset], (np.identity(3)-matrix))+np.dot(dest_pos, matrix)))
             self.approach_destination_from_direction(dest_pos + [front_offset, 0, height_offset], "front")
         self.open_gripper()
 
