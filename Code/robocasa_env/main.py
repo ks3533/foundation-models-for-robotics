@@ -63,12 +63,15 @@ class Controller:
         if not headless:
             self.env.viewer.set_camera(camera_id=2)
 
+        self.env.objects["obj"].friction = (10, 3, 1)
+
     def _simulate(self) -> None:
         while self.simulation_is_running and not self.check_successful():
             self.env.step(self.movement)
             if not self.headless:
                 self.env.render()
         # when the simulation is finished
+        self.simulation_is_running = False
         if not self.headless:
             self.env.close_renderer()
         self.env.reset()
@@ -101,7 +104,8 @@ class Controller:
     def check_successful(self):
         return self.check_object_in_microwave() \
             and self.check_button_pressed() \
-            and self.check_gripper_away_from_microwave()
+            and self.check_gripper_away_from_microwave() \
+        or not self.simulation_is_running
 
     def transform_to_robot_frame(self, coordinates: Sequence[int], orientation=np.identity(3)) \
             -> (np.ndarray, np.ndarray):
@@ -147,7 +151,7 @@ class Controller:
             pass
         while np.max(abs(self.env.observation_spec()["robot0_gripper_qvel"])) > 0.01:
             pass
-        # self.movement[6] = 0
+        self.movement[6] = 0
         print("closed gripper")
         # return self.check_gripping_object()
 
@@ -346,7 +350,7 @@ class Controller:
         button_pos_rel = self.transform_to_robot_frame(button_pos_abs)[0]
         self.rotate_axis([-180, -90, 0], 1)
         self.close_gripper()
-        if not self.move_abs(*(self.get_eef_pos() + [-0.05, 0, 0])):
+        if not self.move_abs(*(self.get_eef_pos() + [-0.1, 0, 0])):
             return False
         self.approach_destination_from_direction(button_pos_rel, "front")
         self.movement[0] = self.max_velocity
@@ -444,7 +448,11 @@ class Controller:
                 [0, 1, 0],
                 [0, 0, 0]
             ])
-            self.move_abs(*(np.dot(self.get_eef_pos()+[0,0,height_offset], (np.identity(3)-matrix))+np.dot(dest_pos, matrix)))
+            self.move_abs(*(np.dot(self.get_eef_pos()+[0, 0, height_offset], (np.identity(3)-matrix))+np.dot(dest_pos, matrix)))
+            self.move_abs(*(
+                    np.dot(self.get_eef_pos() + [-0.1, 0, height_offset], (np.identity(3) - matrix)) + np.dot(dest_pos,
+                                                                                                               matrix)
+            ))
             self.approach_destination_from_direction(dest_pos + [front_offset, 0, height_offset], "front")
         self.open_gripper()
 

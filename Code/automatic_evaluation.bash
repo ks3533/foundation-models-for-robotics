@@ -2,20 +2,43 @@
 
 python_script="Code/LiteLLM/main.py"
 
-batch_size=20
+batch_size=50
 
 # Define combined argument sets
-# ran once:
-#  "-b vision_o4 -v -p"
-#  "-b json_vision_o4 -v -j -p"
-# ran zero times / o3 auth problems
-#  "-b vision_o3 -v -m o3 -p"
-#  "-b json_vision_o3 -v -j -m o3 -p"
+
 configs=(
-  "-b no_vision_o4 -p"
-  "-b vision_gpt-4o -v -m gpt-4o -p"
-  "-b json_vision_gpt-4o -v -j -m gpt-4o -p"
-  "-b no_vision_gpt-4o -m gpt-4o -p"
+  "-b vision_o4-mini -v -p"
+  "-b vision_o4-mini_reasoning -v -R -p"
+  "-b json_vision_o4-mini -v -j -p"
+  "-b json_vision_o4-mini_reasoning -v -j -R -p"
+  "-b no_vision_o4-mini -p"
+  "-b no_vision_o4-mini_reasoning -R -p"
+  "-b vision_legacy_o4-mini --vision-legacy -p"
+  "-b vision_legacy_o4-mini_reasoning --vision-legacy -R -p"
+  "-b vision_legacy_picture_every_tool_call_o4-mini --vision-legacy -s -p"
+  "-b vision_legacy_picture_every_tool_call_o4-mini_reasoning --vision-legacy -s -R -p"
+  
+  "-b vision_gpt-4.1 -v -m gpt-4.1 -p"
+  "-b json_vision_gpt-4.1 -v -j -m gpt-4.1 -p"
+  "-b no_vision_gpt-4.1 -m gpt-4.1 -p"
+  
+  "-b vision_gpt-5 -v -m gpt-5 -p"
+  "-b vision_gpt-5_reasoning -v -m gpt-5 -R -p"
+  "-b json_vision_gpt-5 -v -j -m gpt-5 -p"
+  "-b json_vision_gpt-5_reasoning -v -j -m gpt-5 -R -p"
+  "-b no_vision_gpt-5 -m gpt-5 -p"
+  "-b no_vision_gpt-5_reasoning -m gpt-5 -R -p"
+  "-b vision_legacy_gpt-5 --vision-legacy -m gpt-5 -p"
+  "-b vision_legacy_gpt-5_reasoning --vision-legacy -m gpt-5 -R -p"
+  "-b vision_legacy_picture_every_tool_call_gpt-5 --vision-legacy -s -m gpt-5 -p"
+  "-b vision_legacy_picture_every_tool_call_gpt-5_reasoning --vision-legacy -s -m gpt-5 -R -p"
+
+  "-b vision_gpt-5-nano -v -m gpt-5-nano -p"
+  "-b vision_gpt-5-nano_reasoning -v -m gpt-5-nano -R -p"
+  "-b json_vision_gpt-5-nano -v -j -m gpt-5-nano -p"
+  "-b json_vision_gpt-5-nano_reasoning -v -j -m gpt-5-nano -R -p"
+  "-b no_vision_gpt-5-nano -m gpt-5-nano -p"
+  "-b no_vision_gpt-5-nano_reasoning -m gpt-5-nano -R -p"
 )
 
 cd ..
