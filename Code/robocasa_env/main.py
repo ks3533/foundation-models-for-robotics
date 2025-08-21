@@ -40,7 +40,7 @@ class Controller:
             has_offscreen_renderer=True,
             render_camera=None,
             ignore_done=True,
-            use_camera_obs=True,
+            use_camera_obs=False,
             control_freq=10,
             renderer="mjviewer",
             camera_names="robot0_agentview_center",
@@ -65,12 +65,15 @@ class Controller:
 
         self.env.objects["obj"].friction = (10, 3, 1)
 
+        self.ran_successfully = False
+
     def _simulate(self) -> None:
         while self.simulation_is_running and not self.check_successful():
             self.env.step(self.movement)
             if not self.headless:
                 self.env.render()
         # when the simulation is finished
+        self.ran_successfully = self.check_successful()
         self.simulation_is_running = False
         if not self.headless:
             self.env.close_renderer()
@@ -78,6 +81,7 @@ class Controller:
 
     def start(self) -> None:
         self.simulation_is_running = True
+        self.ran_successfully = False
         self.simulation.start()
 
     def stop(self) -> None:
@@ -85,7 +89,11 @@ class Controller:
         self.simulation.join()
 
     def get_vision_data(self):
-        return self.env.observation_spec()["robot0_agentview_center_image"]
+        return np.flipud(self.env.sim.render(camera_name="robot0_agentview_center",
+                                             height=720,  # Height in pixels
+                                             width=1280,  # Width in pixels
+                                             depth=False
+                                             ))
 
     # maybe add to available commands
     def check_gripping_object(self) -> bool:
@@ -105,7 +113,7 @@ class Controller:
         return self.check_object_in_microwave() \
             and self.check_button_pressed() \
             and self.check_gripper_away_from_microwave() \
-        or not self.simulation_is_running
+            or self.ran_successfully
 
     def transform_to_robot_frame(self, coordinates: Sequence[int], orientation=np.identity(3)) \
             -> (np.ndarray, np.ndarray):
@@ -147,8 +155,7 @@ class Controller:
     def close_gripper(self) -> None:
         """closes gripper"""
         self.movement[6] = 1
-        while np.max(self.env.observation_spec()["robot0_gripper_qvel"]) < 0.01:
-            pass
+        sleep(0.1)
         while np.max(abs(self.env.observation_spec()["robot0_gripper_qvel"])) > 0.01:
             pass
         self.movement[6] = 0
@@ -346,7 +353,7 @@ class Controller:
     def press_button(self) -> bool:
         """presses the button of the microwave"""
         button_pos_abs = self.env.sim.data.get_body_xpos(self.env.microwave.door_name) \
-            + np.dot(np.array([-0.22, -0.33, -0.105]), self.env.robots[0].base_ori.T)
+                         + np.dot(np.array([-0.22, -0.33, -0.105]), self.env.robots[0].base_ori.T)
         button_pos_rel = self.transform_to_robot_frame(button_pos_abs)[0]
         self.rotate_axis([-180, -90, 0], 1)
         self.close_gripper()
@@ -448,13 +455,16 @@ class Controller:
                 [0, 1, 0],
                 [0, 0, 0]
             ])
-            self.move_abs(*(np.dot(self.get_eef_pos()+[0, 0, height_offset], (np.identity(3)-matrix))+np.dot(dest_pos, matrix)))
+            self.move_abs(*(
+                    np.dot(self.get_eef_pos() + [0, 0, height_offset], (np.identity(3) - matrix)) + np.dot(dest_pos,
+                                                                                                           matrix)))
             self.move_abs(*(
                     np.dot(self.get_eef_pos() + [-0.1, 0, height_offset], (np.identity(3) - matrix)) + np.dot(dest_pos,
-                                                                                                               matrix)
+                                                                                                              matrix)
             ))
             self.approach_destination_from_direction(dest_pos + [front_offset, 0, height_offset], "front")
         self.open_gripper()
+        sleep(1)
 
         print(f'placed object {object_name}{f" at {destination_name}" if destination_name is not None else ""}')
 
@@ -528,8 +538,6 @@ if __name__ == "__main__":
             controller.resolve_object_from_name("obj")["pos"] + [0, 0, 0.15],
             "front"
         )
-        controller.rotate_gripper_abs([180, 0, 0])
-        # controller.grip_object_with_rotation_offset("obj", 0)
         controller.grip_object("obj")
 
         controller.move_abs(*(controller.get_eef_pos() + [0, 0, 0.1]))

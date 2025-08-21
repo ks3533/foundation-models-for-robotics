@@ -5,3 +5,9 @@
 /Code/code.egg-info/top_level.txt
 /Code/LiteLLM/API_KEY
 /Code/LiteLLM/Logs/
+/Code/LiteLLM/results_raw.csv
+/Code/LiteLLM/results.csv
+/Code/LiteLLM/plot1_legacy.png
+/Code/LiteLLM/plot1.png
+/Code/LiteLLM/correct_behavior.log
+/Code/pandaomron_clean.xml

@@ -38,9 +38,10 @@ class ImageLogger:
                 "url": f"data:image/jpeg;base64,{b64_image}", "detail": "auto"
             }
         })
+        return image
 
     def add_current_scene_to_message(self, message: dict):
-        ImageLogger.add_image_to_message(message, self.get_image())
+        return ImageLogger.add_image_to_message(message, self.get_image())
 
     def save_image(self, image: Image):
         image.save(self.log_path / f"Image_{self.number_of_images}.jpg", format="JPEG")

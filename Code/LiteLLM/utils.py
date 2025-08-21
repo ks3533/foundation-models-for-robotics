@@ -5,8 +5,6 @@ from typing import Union
 from Code.robocasa_env.main import Controller
 
 high_level_function_subset = {
-    "open_gripper",
-    "close_gripper",
     "grip_object_from_above",  # alternative to grip_object and the nonexistent grip_object_from_direction
     "press_button",
     "open_door",
@@ -14,8 +12,18 @@ high_level_function_subset = {
     "place_object_at_destination"
 }
 
+low_level_function_subset = {
+    "get_eef_pos",
+    "get_eef_rot",
+    "resolve_object_from_name",
+    "open_gripper",
+    "close_gripper",
+    "move_abs",
+}
+
 control_function_subset = {
-    "check_gripping_object"
+    "stop",
+    "check_gripping_object",
 }
 
 cur_dir = Path(__file__).parent
@@ -23,6 +31,7 @@ cur_dir = Path(__file__).parent
 
 def all_functions(controller: Controller):
     functions = [
+        controller.stop,
         controller.get_eef_pos,
         controller.get_eef_rot,
         controller.resolve_object_from_name,
@@ -56,3 +65,11 @@ def high_level_functions(controller: Controller):
 
 def high_level_control_functions(controller: Controller):
     return available_function_generator(controller, high_level_function_subset.union(control_function_subset))
+
+
+def low_level_functions(controller: Controller):
+    return available_function_generator(controller, low_level_function_subset)
+
+
+def low_level_control_functions(controller: Controller):
+    return available_function_generator(controller, low_level_function_subset.union(control_function_subset))

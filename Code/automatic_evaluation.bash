@@ -2,7 +2,7 @@
 
 python_script="Code/LiteLLM/main.py"
 
-batch_size=50
+batch_size=10
 
 # Define combined argument sets
 
@@ -18,20 +18,12 @@ configs=(
   "-b vision_legacy_picture_every_tool_call_o4-mini --vision-legacy -s -p"
   "-b vision_legacy_picture_every_tool_call_o4-mini_reasoning --vision-legacy -s -R -p"
   
-  "-b vision_gpt-4.1 -v -m gpt-4.1 -p"
-  "-b json_vision_gpt-4.1 -v -j -m gpt-4.1 -p"
-  "-b no_vision_gpt-4.1 -m gpt-4.1 -p"
-  
   "-b vision_gpt-5 -v -m gpt-5 -p"
   "-b vision_gpt-5_reasoning -v -m gpt-5 -R -p"
   "-b json_vision_gpt-5 -v -j -m gpt-5 -p"
   "-b json_vision_gpt-5_reasoning -v -j -m gpt-5 -R -p"
   "-b no_vision_gpt-5 -m gpt-5 -p"
   "-b no_vision_gpt-5_reasoning -m gpt-5 -R -p"
-  "-b vision_legacy_gpt-5 --vision-legacy -m gpt-5 -p"
-  "-b vision_legacy_gpt-5_reasoning --vision-legacy -m gpt-5 -R -p"
-  "-b vision_legacy_picture_every_tool_call_gpt-5 --vision-legacy -s -m gpt-5 -p"
-  "-b vision_legacy_picture_every_tool_call_gpt-5_reasoning --vision-legacy -s -m gpt-5 -R -p"
 
   "-b vision_gpt-5-nano -v -m gpt-5-nano -p"
   "-b vision_gpt-5-nano_reasoning -v -m gpt-5-nano -R -p"

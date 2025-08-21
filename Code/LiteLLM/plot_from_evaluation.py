@@ -18,12 +18,12 @@ for label, row in df.iterrows():
     plt.bar(x, row, bottom=bottom, label=split_label[0], color=color)
 
 # Formatting
-plt.xticks(x, categories, rotation=15, ha='right')
+plt.xticks(x, categories, rotation=30, ha='right')
 plt.yticks(np.arange(0, np.max(col_sum)+1, step=5))
 plt.ylabel('Iterationen')
 plt.title('Ergebnisse der variierten Modelle und Modellkonfigurationen')
 plt.legend()
 
-plt.subplots_adjust(bottom=0.122)
+plt.subplots_adjust(bottom=0.45, left=0.15)
 plt.savefig("plot1.png", dpi=300)
 plt.show()

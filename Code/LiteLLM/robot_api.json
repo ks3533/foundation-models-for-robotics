@@ -2,6 +2,13 @@
     {
         "type": "function",
         "function": {
+            "name": "stop",
+            "description": "Stops and evaluates the current simulation. Only run if you have completed your task fully"
+        }
+    },
+    {
+        "type": "function",
+        "function": {
             "name": "get_eef_pos",
             "description": "Get the current end effector position of the robot in its own frame in the scheme [x,y,z] in meters"
         }

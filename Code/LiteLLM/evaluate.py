@@ -21,7 +21,7 @@ for path in Path("Logs").iterdir():
             total += 1
             with open(iteration/"RobocasaLLM.log") as f:
                 log = f.read()
-            if log[-2] == "R":  # Error
+            if len(log) == 0 or log[-2] == "R":  # Error
                 errors += 1
             elif log[-2] == "S":  # Success
                 passes += 1

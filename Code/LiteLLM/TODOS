@@ -1,8 +1,3 @@
-add vision to model as an option
-- vary model
-- vary detail
-- vary camera?
 evaluate CoT prompting
 evaluate effectiveness of certain prompting
-fix errors when calling two tools
-vision approach two
+scene diff in send every tool call
