@@ -8,7 +8,7 @@ import json
 import logging
 from sys import stdout
 
-from Code.LiteLLM.utils import high_level_control_functions
+from Code.LiteLLM.utils import high_level_control_functions, all_functions, low_level_control_functions
 from Code.LiteLLM.image_logger import ImageLogger
 from Code.robocasa_env.main import Controller
 from Code.LiteLLM.scene_description import get_scene_description, get_scene_description_json
@@ -30,7 +30,10 @@ parser.add_argument('-r', '--renderer', action='store_true')
 parser.add_argument('-p', '--log-pictures', action='store_true')
 parser.add_argument('-j', '--use-json', action='store_true')
 parser.add_argument('-R', '--use-reasoning', action='store_true')
-parser.add_argument('-s', '--send-picture-every-tool-call', action='store_true')
+parser.add_argument('-s', '--send-every-tool-call', action='store_true')  # either images or scene diffs
+parser.add_argument('-a', '--use-all-functions', action='store_true')
+parser.add_argument('-l', '--use-low-level-only', action='store_true')
+
 
 args = parser.parse_args()
 
@@ -59,7 +62,7 @@ logger.propagate = False
 
 vision_legacy = args.vision_legacy
 vision_enabled = not vision_legacy and args.vision_enabled
-vision_send_picture_every_tool_call = vision_legacy and args.send_picture_every_tool_call
+vision_send_every_tool_call = vision_legacy and args.send_every_tool_call
 headless = not args.renderer
 
 with open(log_path / "args.json", mode="w") as args_file:
@@ -89,8 +92,9 @@ if vision_enabled:
         {
             "type": "text",
             "text": f"Here's a scene description{' in JSON format' if args.use_json else ''}:\n {scene_description}\n"
-                    "You are the one-armed robot with a single gripper. Your objective is to thaw food in a microwave. "
-                    "The object is called \"obj\" in the simulation, the microwave is called \"container\". "
+                    "You are the one-armed robot with a single gripper that can only hold one thing at a time. "
+                    "Your objective is to thaw food in a microwave. "
+                    "The food object is called \"obj\" in the simulation, the microwave is called \"container\". "
                     "In the end, the food should be in the microwave, the microwave should be turned on "
                     "and you should be at least 25 cm away from the object. "
                     "After formulating your plan, immediately begin execution."
@@ -134,21 +138,40 @@ if vision_legacy:
 logger.info(f"Using system prompt:\n{system_prompt['content']}\n")
 logger.info(f"Using microwave prompt:\n{messages[1]['content'][0]['text']}")
 
-available_functions, tools = high_level_control_functions(controller)
+if args.use_all_functions and args.use_low_level_only:
+    raise ValueError("low level functions cannot be used exclusively and additionally at the same time!")
+if args.use_all_functions:
+    available_functions, tools = all_functions(controller)
+elif args.use_low_level_only:
+    available_functions, tools = low_level_control_functions(controller)
+else:
+    available_functions, tools = high_level_control_functions(controller)
+
 assert len(available_functions) == len(tools)
 
 activate_tools = False
 used_tool_calls = []
 
 error_state = False
+last_image_index = None
+response_count = 0
+response_limit = 20 if args.use_low_level_only else 11
 try:
-    while not controller.check_successful() and len(messages) <= 12:  # fixed limit of ten messages + sys + user
+    while not controller.check_successful() and response_count <= response_limit:  # fixed limit of fifteen messages
+        if args.use_reasoning:
+            if False and "gpt-5" in args.model:  # off for testing
+                reasoning = {"reasoning": {"effort": "medium"}}
+            else:
+                reasoning = {"reasoning_effort": "medium"}
+        else:
+            reasoning = dict()
         response = litellm.completion(
             model=args.model,
             messages=messages,
             tools=tools if activate_tools else None,
-            reasoning_effort="medium" if args.use_reasoning and not activate_tools else None
+            **reasoning
         )
+        response_count += 1
         # response.usage contains tokens
         logger.info(f"\nLLM Response:\n{response.choices[0].message.content}")
         response_message = response.choices[0].message
@@ -189,21 +212,29 @@ try:
             )  # extend conversation with function response
 
             used_tool_calls.append(tool_call)
+
+            if vision_legacy or vision_enabled or args.log_pictures:
+                image = image_logger.get_image()
+                if vision_send_every_tool_call:
+                    message = {"role": "user", "content": [
+                        {
+                            "type": "text",
+                            "text": "This is the current scene, you may continue the task according to the situation "
+                                    "after checking if everything is correct and telling me if the last action was "
+                                    "successful."
+                        }
+                    ]}
+                    image_logger.add_image_to_message(message, image)
+                    if last_image_index is None:
+                        messages[1]["content"].pop()
+                    else:
+                        messages.pop(last_image_index)
+                    last_image_index = len(messages)
+                    messages.append(message)
         else:
             logger.info("LLM is reasoning")
             logger.info(f"\nLLM Reasoning:\n{response.choices[0].message.content}")
             activate_tools = True
-        if vision_legacy or vision_enabled or args.log_pictures:
-            image = image_logger.get_image()
-            if vision_send_picture_every_tool_call:
-                message = {"role": "user", "content": [
-                    {
-                        "type": "text",
-                        "text": "This is the current scene, you may continue the task according to the situation after "
-                                "checking if everything is correct."}
-                ]}
-                image_logger.add_image_to_message(message, image)
-                messages.append(message)
 except Exception as e:
     logger.error(f"Execution failed and yielded following error:\n{e}")
     logger.info("ERROR")
@@ -215,7 +246,7 @@ finally:
         logger.info("Task accomplished successfully!")
         logger.info("SUCCESS")
     else:
-        logger.info("Task failed after ten messages...\n"
+        logger.info("Task failed after fifteen messages...\n"
                     "Current State:\n"
                     f"Object inside the microwave: {controller.check_object_in_microwave()}\n"
                     f"Microwave button was pressed: {controller.check_button_pressed()}\n"

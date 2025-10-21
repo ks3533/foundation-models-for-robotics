@@ -1,0 +1,5 @@
+vision_o4-mini,no_vision_o4-mini_reasoning,vision_legacy_o4-mini_reasoning,json_vision_o4-mini_reasoning,json_vision_o4-mini,vision_legacy_o4-mini,vision_legacy_picture_every_tool_call_o4-mini,no_vision_gpt-5-nano,vision_gpt-5,json_vision_gpt-5_reasoning,no_vision_gpt-5,no_vision_o4-mini,json_vision_gpt-5-nano,json_vision_gpt-5,json_vision_gpt-5-nano_reasoning,vision_gpt-5_reasoning,vision_gpt-5-nano_reasoning,no_vision_gpt-5-nano_reasoning,vision_o4-mini_reasoning,vision_legacy_picture_every_tool_call_o4-mini_reasoning,no_vision_gpt-5_reasoning,vision_gpt-5-nano
+Passes;green,0,1,1,0,2,0,1,0,2,2,0,1,0,1,0,3,0,0,2,1,1,0
+Fails;red,4,2,3,5,1,3,3,0,1,0,1,2,0,0,1,0,0,0,3,3,0,2
+Errors;orange,1,7,3,3,3,2,3,5,4,1,6,5,9,2,7,5,2,7,1,1,8,1
+Timeouts;gray,5,0,3,2,4,5,3,5,3,7,3,2,1,7,2,2,8,3,4,5,1,7
